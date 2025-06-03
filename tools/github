@@ -118,6 +118,147 @@ $current_body"
             jq -r '.[] | "  #\(.number): \(.title) (by \(.author.login))"'
         ;;
     
+    parse-checklist)
+        # Parse checklist items from issue
+        issue="$2"
+        
+        # Get issue body
+        body=$(gh issue view "$issue" --json body --jq '.body')
+        
+        # Parse checklist items (- [ ] or - [x])
+        count=0
+        echo "$body" | while IFS= read -r line; do
+            if echo "$line" | grep -qE '^\s*-\s*\[([ x])\]'; then
+                count=$((count + 1))
+                # Extract checkbox state
+                if echo "$line" | grep -q '^\s*-\s*\[x\]'; then
+                    status="completed"
+                else
+                    status="pending"
+                fi
+                
+                # Remove the checkbox syntax to get the text
+                text=$(echo "$line" | sed -E 's/^[[:space:]]*-[[:space:]]*\[[[:space:]x]\][[:space:]]*//')
+                
+                # Output in format: NUMBER|STATUS|TEXT
+                echo "${count}|${status}|${text}"
+            fi
+        done
+        ;;
+    
+    checklist-status)
+        # Get completion status of checklist items
+        issue="$2"
+        
+        # Get checklist items
+        items=$("$0" parse-checklist "$issue")
+        
+        if [ -z "$items" ]; then
+            echo "No checklist items found in issue #$issue"
+            exit 0
+        fi
+        
+        # Count completed and total
+        total=$(echo "$items" | wc -l)
+        completed=$(echo "$items" | grep -c '|completed|')
+        
+        echo "Issue #$issue checklist status:"
+        echo "  Total items: $total"
+        echo "  Completed: $completed"
+        echo "  Pending: $((total - completed))"
+        echo "  Progress: $((completed * 100 / total))%"
+        echo ""
+        echo "Items:"
+        echo "$items" | while IFS='|' read -r num status text; do
+            if [ "$status" = "completed" ]; then
+                echo "  ✓ $num. $text"
+            else
+                echo "  ☐ $num. $text"
+            fi
+        done
+        ;;
+    
+    update-checkbox)
+        # Update a specific checkbox in an issue
+        issue="$2"
+        item_number="$3"
+        new_status="$4"  # "check" or "uncheck"
+        
+        # Get current issue body
+        body=$(gh issue view "$issue" --json body --jq '.body')
+        
+        # Count line number for the checkbox item
+        line_num=0
+        target_line=0
+        echo "$body" | while IFS= read -r line; do
+            line_num=$((line_num + 1))
+            if echo "$line" | grep -qE '^\s*-\s*\[([ x])\]'; then
+                checkbox_count=$((${checkbox_count:-0} + 1))
+                if [ "$checkbox_count" -eq "$item_number" ]; then
+                    echo "$line_num"
+                    break
+                fi
+            fi
+        done > /tmp/github_line_num_$$
+        
+        target_line=$(cat /tmp/github_line_num_$$)
+        rm -f /tmp/github_line_num_$$
+        
+        if [ "$target_line" -eq 0 ]; then
+            echo "Error: Checkbox item $item_number not found in issue #$issue"
+            exit 1
+        fi
+        
+        # Update the checkbox
+        if [ "$new_status" = "check" ]; then
+            new_body=$(echo "$body" | awk -v line="$target_line" 'NR==line {sub(/\[[ ]\]/, "[x]")} 1')
+        else
+            new_body=$(echo "$body" | awk -v line="$target_line" 'NR==line {sub(/\[x\]/, "[ ]")} 1')
+        fi
+        
+        # Update the issue
+        gh issue edit "$issue" --body "$new_body"
+        echo "Updated checkbox $item_number in issue #$issue to $new_status"
+        ;;
+    
+    update-checklist)
+        # Update multiple checkboxes at once
+        issue="$2"
+        shift 2
+        
+        # Get current issue body
+        body=$(gh issue view "$issue" --json body --jq '.body')
+        new_body="$body"
+        
+        # Process each update (format: "NUMBER:check" or "NUMBER:uncheck")
+        for update in "$@"; do
+            item_number="${update%%:*}"
+            action="${update##*:}"
+            
+            # Find and update the specific checkbox
+            line_num=0
+            checkbox_count=0
+            while IFS= read -r line; do
+                line_num=$((line_num + 1))
+                if echo "$line" | grep -qE '^\s*-\s*\[([ x])\]'; then
+                    checkbox_count=$((checkbox_count + 1))
+                    if [ "$checkbox_count" -eq "$item_number" ]; then
+                        if [ "$action" = "check" ]; then
+                            new_body=$(echo "$new_body" | awk -v line="$line_num" 'NR==line {sub(/\[[ ]\]/, "[x]")} 1')
+                        else
+                            new_body=$(echo "$new_body" | awk -v line="$line_num" 'NR==line {sub(/\[x\]/, "[ ]")} 1')
+                        fi
+                        break
+                    fi
+                fi
+            done <<< "$body"
+        done
+        
+        # Update the issue once with all changes
+        gh issue edit "$issue" --body "$new_body"
+        echo "Updated checklist items in issue #$issue"
+        ;;
+    
     *)
         echo "Usage: github <command> [args]"
         echo ""
@@ -136,5 +277,10 @@ $current_body"
         echo "  label ISSUE LABEL         - Add label"
         echo "  close ISSUE [COMMENT]     - Close issue"
         echo "  recent [MINUTES]          - Recent issues"
+        echo "  parse-checklist ISSUE     - Parse checklist items from issue"
+        echo "  checklist-status ISSUE    - Show checklist completion status"
+        echo "  update-checkbox ISSUE NUM STATUS - Update single checkbox (check/uncheck)"
+        echo "  update-checklist ISSUE UPDATES... - Update multiple checkboxes"
+        echo "                            Format: NUM:check or NUM:uncheck"
         ;;
 esac
