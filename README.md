@@ -26,6 +26,16 @@ Then in Claude Code:
 /project:work 5   # Start 5 parallel development sessions
 ```
 
+### Other Options
+
+```bash
+# See help
+bash install.sh --help
+
+# Uninstall
+bash install.sh --uninstall
+```
+
 ## 🛠️ Core Tools
 
 - **`task`** - Queue management with dependency tracking

@@ -1,80 +1,54 @@
 #!/bin/bash
-# Claude Code Parallel - Installer
+# Claude Code Parallel - Simplified Installer v2
 # 
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-parallel/main/install.sh | bash
-#   bash install.sh [--help]
+#   bash install.sh [--uninstall] [--help]
 
-set -e
+set -euo pipefail
 
 # Configuration
-REPO="hikarubw/claude-code-parallel"
-BASE_URL="https://raw.githubusercontent.com/$REPO/main"
-VERSION="1.0.0"
+readonly REPO="hikarubw/claude-code-parallel"
+readonly VERSION="1.0.1"
+readonly BASE_URL="https://raw.githubusercontent.com/$REPO/main"
+
+# Tools and commands to install
+readonly TOOLS=(task session github maintain)
+readonly COMMANDS=(setup work status manual maintain auto)
 
 # Colors
-BLUE='\033[0;34m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-RED='\033[0;31m'
-NC='\033[0m'
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly BLUE='\033[0;34m'
+readonly YELLOW='\033[1;33m'
+readonly NC='\033[0m'
 
-# Parse arguments
-for arg in "$@"; do
-    case $arg in
-        --help|-h)
-            echo "Claude Code Parallel Installer v$VERSION"
-            echo ""
-            echo "Usage:"
-            echo "  install.sh          Install in current project"
-            echo "  install.sh --help   Show this help"
-            echo ""
-            echo "The installer automatically detects whether to install"
-            echo "for the current project (if in git repo) or globally."
-            exit 0
-            ;;
-    esac
-done
+# Error handling
+trap 'echo -e "${RED}Installation failed on line $LINENO${NC}" >&2' ERR
 
-echo -e "${BLUE}Claude Code Parallel - Installer${NC}"
-echo ""
+# Helper functions
+log() {
+    echo -e "${BLUE}[Claude Parallel]${NC} $*"
+}
 
-# Smart detection
-if [ -d ".git" ] || [ -f ".claude/settings.local.json" ]; then
-    echo -e "${GREEN}✓ Git repository detected${NC}"
-    echo "Installing for this project..."
-    INSTALL_DIR=".claude"
-    INSTALL_TYPE="project"
-else
-    echo "No git repository found."
-    echo ""
-    echo "1) Initialize git and install here"
-    echo "2) Install globally (for all projects)"
-    echo "3) Cancel"
-    echo ""
-    read -p "Choice [1-3]: " choice
-    
-    case $choice in
-        1)
-            git init
-            INSTALL_DIR=".claude"
-            INSTALL_TYPE="project"
-            ;;
-        2)
-            INSTALL_DIR="$HOME/.claude-code-tools"
-            INSTALL_TYPE="global"
-            ;;
-        *)
-            echo "Installation cancelled."
-            exit 0
-            ;;
-    esac
-fi
+success() {
+    echo -e "${GREEN}✓${NC} $*"
+}
 
-# Create directories
-mkdir -p "$INSTALL_DIR"/{tools,commands,tasks}
+error() {
+    echo -e "${RED}✗${NC} $*" >&2
+}
 
-# Function to download with retry
+warn() {
+    echo -e "${YELLOW}⚠${NC} $*"
+}
+
+# Check if command exists
+has_command() {
+    command -v "$1" >/dev/null 2>&1
+}
+
+# Download with retry
 download_file() {
     local url=$1
     local dest=$2
@@ -82,7 +56,6 @@ download_file() {
     
     while [ $retries -gt 0 ]; do
         if curl -fsSL "$url" -o "$dest" 2>/dev/null; then
-            [ -x "$dest" ] || chmod +x "$dest" 2>/dev/null
             return 0
         fi
         ((retries--))
@@ -91,88 +64,232 @@ download_file() {
     return 1
 }
 
-# Download tools
-echo "Downloading tools..."
-for tool in task session github maintain; do
-    if download_file "$BASE_URL/tools/$tool" "$INSTALL_DIR/tools/$tool"; then
-        echo -e "  ${GREEN}✓${NC} $tool"
+# Verify installation
+verify_installation() {
+    local errors=0
+    
+    log "Verifying installation..."
+    
+    # Check tools
+    for tool in "${TOOLS[@]}"; do
+        if [ -x ".claude/tools/$tool" ]; then
+            success "Tool: $tool"
+        else
+            error "Missing tool: $tool"
+            ((errors++))
+        fi
+    done
+    
+    # Check commands
+    for cmd in "${COMMANDS[@]}"; do
+        if [ -f ".claude/commands/$cmd.md" ]; then
+            success "Command: /project:$cmd"
+        else
+            error "Missing command: $cmd"
+            ((errors++))
+        fi
+    done
+    
+    # Check settings
+    if [ -f ".claude/settings.local.json" ]; then
+        success "Settings file"
     else
-        echo -e "  ${RED}✗${NC} $tool (failed)"
+        error "Missing settings file"
+        ((errors++))
     fi
-done
+    
+    return $errors
+}
 
-# Download commands
-echo "Downloading commands..."
-for cmd in setup work status manual maintain auto; do
-    if download_file "$BASE_URL/commands/$cmd.md" "$INSTALL_DIR/commands/$cmd.md"; then
-        echo -e "  ${GREEN}✓${NC} /project:$cmd"
+# Uninstall function
+uninstall() {
+    log "Uninstalling Claude Code Parallel..."
+    
+    if [ -d ".claude" ]; then
+        rm -rf .claude
+        success "Removed .claude directory"
+    fi
+    
+    if [ -f "claude-tools" ]; then
+        rm -f claude-tools
+        success "Removed launcher script"
+    fi
+    
+    log "Uninstall complete"
+}
+
+# Show help
+show_help() {
+    cat << EOF
+Claude Code Parallel Installer v$VERSION
+
+Usage:
+  install.sh              Install in current directory
+  install.sh --uninstall  Remove installation
+  install.sh --help       Show this help
+
+Requirements:
+  - Git repository (or will offer to create one)
+  - Bash shell
+  - curl
+
+The installer will:
+  1. Check/create git repository
+  2. Download tools and commands
+  3. Set up permissions
+  4. Create launcher script
+  5. Verify installation
+
+Learn more: https://github.com/$REPO
+EOF
+}
+
+# Main installation
+install() {
+    log "Claude Code Parallel Installer v$VERSION"
+    echo ""
+    
+    # Check git repository
+    if [ ! -d ".git" ]; then
+        warn "Not in a git repository"
+        echo ""
+        read -p "Initialize git repository here? [y/N] " -n 1 -r
+        echo
+        if [[ $REPLY =~ ^[Yy]$ ]]; then
+            git init
+            success "Initialized git repository"
+        else
+            error "Claude Code Parallel requires a git repository"
+            exit 1
+        fi
     else
-        echo -e "  ${RED}✗${NC} /project:$cmd (failed)"
+        success "Git repository detected"
     fi
-done
-
-# Create settings file
-cat > "$INSTALL_DIR/settings.local.json" << 'EOF'
+    
+    # Create directories
+    log "Creating directories..."
+    mkdir -p .claude/{tools,commands,tasks}
+    success "Directory structure created"
+    
+    # Download tools
+    log "Downloading tools..."
+    local failed=0
+    for tool in "${TOOLS[@]}"; do
+        printf "  %-20s" "$tool"
+        if download_file "$BASE_URL/tools/$tool" ".claude/tools/$tool"; then
+            chmod +x ".claude/tools/$tool"
+            success "downloaded"
+        else
+            error "failed"
+            ((failed++))
+        fi
+    done
+    
+    # Download commands
+    log "Downloading commands..."
+    for cmd in "${COMMANDS[@]}"; do
+        printf "  %-20s" "/project:$cmd"
+        if download_file "$BASE_URL/commands/$cmd.md" ".claude/commands/$cmd.md"; then
+            success "downloaded"
+        else
+            error "failed"
+            ((failed++))
+        fi
+    done
+    
+    if [ $failed -gt 0 ]; then
+        warn "$failed downloads failed - installation may be incomplete"
+    fi
+    
+    # Create settings file
+    log "Creating settings file..."
+    cat > .claude/settings.local.json << 'EOF'
 {
   "permissions": {
     "allow": [
       "Bash(git:*)",
       "Bash(gh:*)",
       "Bash(tmux:*)",
-      "Bash(npm:*)",
-      "Bash(node:*)",
       "Bash(.claude/tools/*:*)"
     ],
     "deny": []
   }
 }
 EOF
-
-# Project-specific setup
-if [ "$INSTALL_TYPE" = "project" ]; then
+    success "Settings configured"
+    
     # Create launcher script
+    log "Creating launcher script..."
     cat > claude-tools << 'EOF'
 #!/bin/bash
-# Claude Code Tools Launcher
+# Claude Code Parallel - Tool Launcher
+
 if [ -z "$1" ]; then
-    echo "Claude Code Tools - Available tools:"
-    ls .claude/tools 2>/dev/null | sed 's/^/  /'
+    echo "Claude Code Parallel - Available tools:"
+    for tool in .claude/tools/*; do
+        [ -f "$tool" ] && echo "  $(basename "$tool")"
+    done
+    echo ""
+    echo "Usage: ./claude-tools <tool> [args]"
+    echo "Example: ./claude-tools task add 123"
 else
-    exec ".claude/tools/$@"
+    tool=".claude/tools/$1"
+    if [ -x "$tool" ]; then
+        shift
+        exec "$tool" "$@"
+    else
+        echo "Error: Unknown tool '$1'"
+        echo "Run ./claude-tools to see available tools"
+        exit 1
+    fi
 fi
 EOF
     chmod +x claude-tools
+    success "Launcher created"
     
-    echo ""
-    echo -e "${GREEN}✅ Installation complete!${NC}"
-    echo ""
-    echo "Usage in Claude Code:"
-    echo "  /project:setup    - Initialize project"
-    echo "  /project:work 5   - Start parallel development"
-    echo "  /project:status   - View progress"
-    echo ""
-    echo "Usage in terminal:"
-    echo "  ./claude-tools task add 123"
-    echo "  ./claude-tools session start"
-else
-    # Global installation
-    echo ""
-    echo -e "${GREEN}✅ Global installation complete!${NC}"
-    echo ""
-    echo "Add to your shell profile:"
-    echo "  export PATH=\"\$PATH:$INSTALL_DIR/tools\""
-    echo ""
-    echo "Then in any project:"
-    echo "  cd your-project"
-    echo "  claude-parallel-install"
+    # Create version file
+    echo "$VERSION" > .claude/VERSION
     
-    # Create installer symlink
-    cat > "$INSTALL_DIR/claude-parallel-install" << 'EOF'
-#!/bin/bash
-curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-parallel/main/install.sh | bash
-EOF
-    chmod +x "$INSTALL_DIR/claude-parallel-install"
-fi
+    # Verify installation
+    echo ""
+    if verify_installation; then
+        echo ""
+        log "${GREEN}Installation complete!${NC}"
+        echo ""
+        echo "Next steps:"
+        echo "  1. Open this directory in Claude Code"
+        echo "  2. Run: /project:setup"
+        echo ""
+        echo "Manual usage:"
+        echo "  ./claude-tools task add 123"
+        echo "  ./claude-tools session start 3"
+    else
+        echo ""
+        error "Installation incomplete - some files are missing"
+        echo "Try running the installer again or check your internet connection"
+        exit 1
+    fi
+}
 
-echo ""
-echo -e "${BLUE}Happy coding with Claude! 🚀${NC}"
+# Main entry point
+main() {
+    case "${1:-}" in
+        --uninstall)
+            uninstall
+            ;;
+        --help|-h)
+            show_help
+            ;;
+        "")
+            install
+            ;;
+        *)
+            error "Unknown option: $1"
+            show_help
+            exit 1
+            ;;
+    esac
+}
+
+# Run main function
+main "$@"

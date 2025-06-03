@@ -1,5 +1,29 @@
 # Changelog
 
+All notable changes to Claude Code Parallel will be documented in this file.
+
+## [1.0.1] - 2024-06-03
+
+### Added
+- Unified installer with better error handling
+- `--uninstall` option for easy removal
+- `--help` option with detailed information
+- Installation verification with detailed feedback
+- Version management system
+- Retry logic for downloads
+- Improved launcher script with error messages
+
+### Changed
+- Simplified installation process
+- Better progress indicators during installation
+- Clearer error messages
+- Consolidated deployment scripts into single `deploy.sh`
+
+### Removed
+- Redundant deployment scripts (cdn, gist, pages)
+- OAuth tools (moved to separate repository)
+- Non-core tools (analyze, monitor)
+
 ## [1.0.0] - 2024-06-03
 
 ### Initial Release
