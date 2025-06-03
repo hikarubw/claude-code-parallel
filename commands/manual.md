@@ -1,69 +1,105 @@
-# Manual Work Management
+# Manual Task Management
 
-Manage manual work queue with blocking detection and status tracking.
+Manage manual tasks within issues with dependency tracking and status updates.
 
-Usage: /user:manual [action] [args]
+Usage: /project:manual [action] [args]
 
 Arguments: $ARGUMENTS
 
 ## Actions
 
 ### show (default)
-Display enhanced manual work dashboard with:
+Display enhanced manual task dashboard with:
 - 🚨 Tasks blocking automated work (priority)
-- 📊 Status tracking (pending/in-progress/completed)
-- ⏰ Task age and assignments
-- 🔗 Blocking relationships
+- 📊 Task status within issues
+- ⏰ Task age and context
+- 🔗 Task dependencies and blocking
 
-### start ISSUE
+### start TASK-ID
 Mark manual task as in-progress:
-- Update status tracking
-- Show what automated work will be unblocked
+- Update task status in issue checklist
+- Show what automated tasks will be unblocked
 - Track start time
 
-### complete ISSUE  
+### complete TASK-ID  
 Mark manual task as completed:
-- Update status to completed
-- Check what automated work is now unblocked
-- Suggest next actions
+- Check off task in issue checklist
+- Identify newly unblocked tasks
+- Suggest next automated tasks
 
-### help ISSUE
+### help TASK-ID
 Get detailed guidance for manual task:
-- Fetch full issue details
+- Show full task context from issue
 - Analyze requirements
 - Provide step-by-step help
-- Offer to create needed files
+- Offer to create needed files/configs
 
 ### refresh
-Regenerate manual work analysis:
-- Re-analyze all manual tasks
-- Update blocking relationships
+Re-analyze all manual tasks:
+- Parse latest issue checklists
+- Update task dependencies
 - Refresh priority ordering
+
+## Task ID Format
+Tasks use `#issue-task` format (e.g., `#10-5` for issue 10, task 5)
 
 ## Example Usage
 ```
-/user:manual show
+/project:manual show
 
-🚨 HIGH PRIORITY - Blocking automated work:
-  #45: 👤 Setup OAuth credentials (blocks 3 tasks)
-      Status: pending | Age: 2 hours | Blocks: #46, #47, #48
+🚨 HIGH PRIORITY - Blocking automated tasks:
+  
+Issue #10: Dark Mode Support
+  #10-5: 👤 Design dark color palette
+         Status: pending | Blocks: #10-2, #10-4
+         
+Issue #11: Authentication System  
+  #11-1: 👤 Choose authentication strategy
+         Status: pending | Blocks: #11-3, #11-4, #11-5
+         Age: 2 hours
 
 📋 Other manual tasks:
-  #52: 👤 Deploy to staging
-      Status: in-progress | Started: 10 min ago
 
-/user:manual start 45
-Starting work on #45...
-This will unblock 3 automated tasks when complete.
+Issue #12: Documentation Update
+  #12-6: 👤 Review and approve docs
+         Status: in-progress | Started: 10 min ago
+         No tasks blocked
 
-/user:manual complete 45  
-Completed #45! 
-Unblocked: #46, #47, #48
-Run /user:execute to work on unblocked tasks.
+/project:manual start #10-5
+Starting work on #10-5 (Design dark color palette)...
+This will unblock 2 automated tasks when complete:
+- #10-2: Update color tokens for dark theme
+- #10-4: Update all components for theme
+
+/project:manual complete #10-5  
+✓ Completed #10-5!
+Updated checklist in issue #10
+Unblocked tasks: #10-2, #10-4
+Run /project:work to start automated tasks.
 ```
 
-## Tools Used
-- `github issues` - Fetch manual tasks
-- `blocking blocks` - Check dependencies
-- `queue` - Manage work queue
-- `approve` - Track completion status
+## Manual Task Workflow
+
+1. **Identify** - Use `show` to see all manual tasks
+2. **Prioritize** - Focus on tasks blocking most work
+3. **Start** - Mark task as in-progress
+4. **Complete** - Check off when done
+5. **Continue** - Automated tasks can now proceed
+
+## Integration with Issues
+
+Manual tasks are tracked as checklist items:
+```markdown
+## Tasks
+### Manual Work
+- [x] 👤 Choose authentication strategy
+- [ ] 👤 Set up OAuth credentials
+```
+
+Completing manual tasks updates the checklist automatically.
+
+## Tips
+- Complete blocking manual tasks first
+- Use `help` for guidance on complex tasks
+- Manual tasks often unlock multiple automated tasks
+- Check issue comments for additional context

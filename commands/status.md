@@ -1,6 +1,6 @@
-# Development Status Dashboard
+# Task-Based Development Status Dashboard
 
-Get a comprehensive view of your parallel development progress.
+Get a comprehensive view of your parallel task development progress.
 
 Usage: /project:status [what]
 
@@ -9,87 +9,114 @@ Arguments: $ARGUMENTS
 ## Dashboard Sections
 
 ### Overview
-- Active sessions and their assignments
-- Work queue status
+- Active sessions and their task assignments
+- Task queue status by issue
 - Manual tasks blocking automation
-- Recent completions
-- Resource usage
+- Recent task completions
+- Issue progress (checklist completion)
 
 ### Detailed Views
 I'll parse arguments for specific views:
 - `sessions` - Detailed session information
-- `tasks` - Task queue and blocking
+- `tasks` - Task queue and dependencies
+- `issues` - Issue-level progress
 - `manual` - Manual work focus
 - `activity` - Recent activity log
 - Default: Full dashboard
 
 ## Example Dashboard
 ```
-=== Parallel Development Status ===
+=== Task-Based Parallel Development Status ===
 Time: 2024-01-15 14:23:45
 Uptime: 2 hours 15 minutes
 
 === Active Sessions (4/5) ===
-Session    | Status  | Issue | Worktree         | Duration
------------|---------|-------|------------------|----------
-claude-1   | working | #123  | .worktrees/123   | 45 min
-claude-2   | working | #456  | .worktrees/456   | 23 min
-claude-3   | working | #789  | .worktrees/789   | 12 min
-claude-4   | idle    | -     | -                | -
-claude-5   | working | #234  | .worktrees/234   | 5 min
+Session    | Status  | Task  | Branch               | Duration
+-----------|---------|-------|----------------------|----------
+claude-1   | working | #10-1 | task/#10-1-theme    | 45 min
+claude-2   | working | #10-3 | task/#10-3-toggle   | 23 min
+claude-3   | working | #11-2 | task/#11-2-tests    | 12 min
+claude-4   | idle    | -     | -                    | -
+claude-5   | working | #12-4 | task/#12-4-docs     | 5 min
 
-=== Work Queue ===
-Ready: 8 tasks
-Blocked: 3 tasks (waiting on manual work)
-Total remaining: 11 tasks
+=== Issue Progress ===
+Issue #10: Dark Mode Support
+  Progress: [████████░░░░] 67% (4/6 tasks)
+  ✓ Design dark color palette
+  ✓ Get design approval
+  ⚡ Create theme context provider (in progress)
+  ⚡ Add theme toggle component (in progress)
+  ◯ Update color tokens for dark theme (blocked)
+  ◯ Update all components for theme (blocked)
 
-Next in queue:
-1. #345 - bug: Fix navigation (priority: 8)
-2. #567 - feat: Add search (priority: 6)
-3. #890 - chore: Update CI (priority: 4)
+Issue #11: Authentication System  
+  Progress: [████░░░░░░░░] 33% (2/6 tasks)
+  ✓ Choose auth strategy
+  ⚡ Write auth unit tests (in progress)
+  ◯ Create auth database schema
+  ◯ Implement JWT generation
+  ◯ Add login/logout endpoints
+  ◯ Create auth middleware
+
+=== Task Queue ===
+Ready: 8 tasks across 3 issues
+Blocked: 5 tasks (3 by manual work, 2 by dependencies)
+Total remaining: 13 tasks
+
+Next ready tasks:
+1. #12-1 - Update API documentation
+2. #12-2 - Create troubleshooting guide  
+3. #11-3 - Create auth database schema
 
 === Manual Tasks Blocking Work ===
 🚨 HIGH PRIORITY - Unblocking automated tasks:
-#101: 👤 Setup OAuth credentials
-      Blocks: #102, #103, #104 (3 tasks)
+#10-5: 👤 Design dark color palette
+      Blocks: #10-2, #10-4 (2 tasks)
       Status: Not started
       
-#205: 👤 Deploy to staging
-      Blocks: #206 (1 task)
-      Status: In progress (started 30 min ago)
+#11-1: 👤 Choose authentication strategy
+      Blocks: #11-3, #11-4, #11-5 (3 tasks)
+      Status: In progress
 
 === Recent Completions (last hour) ===
-✓ #111 - bug: Fix login error (PR #412 merged)
-✓ #222 - feat: Add dark mode (PR #413 created)
-✓ #333 - docs: Update README (PR #414 merged)
+✓ #10-6 - Get design approval (manual)
+✓ #11-1 - Choose auth strategy (manual)
+✓ #12-3 - Add video tutorial scripts (PR #412)
 
 === Resource Usage ===
-Worktrees: 12 active (1.8 GB)
+Worktrees: 4 active (task-based)
 Sessions: 5 running
 CPU: Normal
 Memory: 2.3 GB
 
 === Statistics ===
 Today's progress:
-- Completed: 18 tasks
-- In progress: 4 tasks  
-- Blocked: 3 tasks
-- Approval rate: 94%
+- Tasks completed: 18
+- Tasks in progress: 4  
+- Tasks blocked: 5
+- Issues touched: 3
+- PRs created: 12
+- PRs merged: 8
 
 Velocity: 2.4 tasks/hour
 Estimated completion: ~5 hours remaining
 ```
 
+## Key Indicators
+- ⚡ Task in progress
+- ✓ Task completed
+- ◯ Task pending
+- 👤 Manual task
+
 ## Quick Actions
 Based on status, I might suggest:
-- Start manual tasks to unblock work
+- Complete manual tasks to unblock work
+- Focus on nearly-complete issues
+- Review task dependencies
 - Clean up completed worktrees
-- Adjust parallelism level
-- Review blocked tasks
 
 ## Auto-Refresh
-This command can be run repeatedly to monitor progress.
-Consider using `watch` in terminal:
+This command can be run repeatedly to monitor progress:
 ```bash
 watch -n 60 'claude /project:status'
 ```

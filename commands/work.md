@@ -1,6 +1,6 @@
-# Start Parallel Development
+# Start Task-Based Parallel Development
 
-Begin intelligent parallel development with automatic orchestration.
+Begin intelligent parallel development with automatic task orchestration.
 
 Usage: /project:work [N] [options]
 
@@ -14,78 +14,87 @@ Arguments: $ARGUMENTS
    - Sessions named claude-1, claude-2, etc.
 
 2. **Intelligent Task Assignment**
-   - Get next unblocked task with `task next`
-   - Check dependencies are satisfied
-   - Verify risk level for auto-approval
-   - Create isolated worktree
+   - Get next unblocked task from queue
+   - Tasks identified as `#issue-task` (e.g., #47-3)
+   - Check task dependencies are satisfied
+   - Verify task type (claude-work vs manual-work)
+   - Create isolated worktree for the task
    - Assign to available session
 
 3. **Automatic Orchestration**
    - Monitor session progress
-   - Detect completion signals (PR created, tests pass, idle time)
+   - Detect completion (PR created, tests pass)
+   - Update issue checklist on PR merge
    - Clean completed worktrees
-   - Assign new work automatically
+   - Assign new tasks automatically
 
-4. **Risk-Based Auto-Approval**
-   - Evaluate each task's risk
-   - Auto-approve within tolerance
-   - Flag high-risk for manual review
+4. **Task-Based Workflow**
+   - Each task gets its own branch/PR
+   - PRs reference the checklist item
+   - Issues stay open until all tasks complete
+   - Better granularity than issue-based approach
 
 ## Options Parsing
 I'll parse your arguments for:
 - Number of sessions (first number)
-- `--safe` / `--normal` / `--aggressive` (approval level)
+- `--focus=ISSUE` (work on specific issue's tasks)
 - `--watch` (continuous monitoring)
-- `--focus=PATTERN` (work on specific issues)
+- `--prefer-small` (prioritize quick tasks)
 
-## Approval Levels
-- **--safe** (default): Only UI, docs, simple bugs
-- **--normal**: Most features, refactoring
-- **--aggressive**: Everything except security/data
+## Task Selection Strategy
+- Prioritize unblocked tasks
+- Consider dependencies across issues
+- Skip manual-work tasks (marked with 👤)
+- Balance work across different issues
 
 ## Example Usage
 ```
-# Start 5 sessions with safe approval
+# Start 5 sessions
 /project:work 5
 
-# Aggressive mode with monitoring  
-/project:work 3 --aggressive --watch
+# Focus on issue #10's tasks
+/project:work 3 --focus=10
 
-# Focus on bugs only
-/project:work --focus=bug:*
+# Prefer small tasks first
+/project:work --prefer-small
 ```
 
 ## Live Example
 ```
-Starting parallel development...
+Starting task-based parallel development...
 ✓ Created 5 sessions with worktrees
 
 Session assignments:
-claude-1: Working on #123 (bug: fix button color)
-         Worktree: .worktrees/123
-claude-2: Working on #456 (feat: add pagination)  
-         Worktree: .worktrees/456
-claude-3: Working on #789 (chore: update deps)
-         Worktree: .worktrees/789
-claude-4: Idle (waiting for #234 - blocked by manual task)
-claude-5: Working on #567 (docs: API examples)
-         Worktree: .worktrees/567
+claude-1: Working on #10-1 (Create theme context provider)
+         Branch: task/#10-1-theme-context
+         Worktree: .worktrees/task-10-1
+claude-2: Working on #10-3 (Add theme toggle component)  
+         Branch: task/#10-3-theme-toggle
+         Worktree: .worktrees/task-10-3
+claude-3: Working on #11-2 (Write auth unit tests)
+         Branch: task/#11-2-auth-tests
+         Worktree: .worktrees/task-11-2
+claude-4: Idle (waiting for #10-5 - manual task)
+claude-5: Working on #12-1 (Update API documentation)
+         Branch: task/#12-1-api-docs
+         Worktree: .worktrees/task-12-1
 
 Status: 4/5 sessions active
-Queue: 12 remaining (3 blocked)
+Queue: 23 tasks (14 ready, 9 blocked)
+Issues: 3 active (#10, #11, #12)
 
-Monitoring enabled - will assign new work automatically.
+Monitoring enabled - will assign new tasks automatically.
 ```
 
-## Monitoring
-With `--watch`, I'll:
-- Check for completed work every 5 minutes
-- Assign new tasks to free sessions
-- Handle new issues automatically
-- Clean up completed worktrees
+## PR Creation
+Each task PR will:
+- Title: "Task #10-1: Create theme context provider"
+- Body: References checklist item in issue #10
+- Labels: Inherit from parent issue
+- Auto-updates checklist on merge
 
 ## Tips
-- Use `/project:status` to see current state
-- Use `/project:manual` to unblock work
-- Sessions persist across Claude restarts
-- Each issue gets a clean git environment
+- Use `/project:status` to see task progress
+- Use `/project:manual` to complete manual tasks
+- Tasks complete faster than full issues
+- Better parallelism with smaller work units

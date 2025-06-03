@@ -1,6 +1,6 @@
-# Initialize Project for Parallel Development
+# Initialize Project for Task-Based Parallel Development
 
-Prepare your project for intelligent parallel development with Claude.
+Prepare your project for intelligent task-based parallel development with Claude.
 
 Usage: /project:setup
 
@@ -14,29 +14,44 @@ Arguments: $ARGUMENTS
 - Map module organization and dependencies
 - Identify test patterns and CI/CD setup
 
-### 2. Fetch and Analyze GitHub Issues
-- Get all open issues with full details
-- If no issues exist, help create initial task breakdown
-- Analyze issue descriptions and checklists
+### 2. Create or Fetch GitHub Issues
+- Check for existing open issues
+- If no issues exist, help create high-level issues (features/bugs)
+- Issues are containers for related tasks, not individual work items
+- Fetch full issue details including existing checklists
 
-### 3. Complexity Assessment
-- Estimate work required for each issue
-- Identify issues needing breakdown (>4 hours)
-- Detect dependencies between issues
-- Assess risk levels (UI, logic, data, security)
+### 3. Break Down Issues into Tasks
+- Analyze each issue to identify discrete tasks
+- Create or update checklist in issue body/comments
+- Separate tasks into:
+  - `claude-work`: Automated development tasks
+  - `manual-work`: Human tasks (prefixed with 👤)
+- Each task should be 1-4 hours of work
+- Ensure tasks are independent when possible
 
-### 4. Create/Update Issues
-- Break complex issues into sub-tasks using `github split`
-- Add appropriate labels:
-  - `claude-work` for automated tasks
-  - `manual-work` for human tasks (prefix with 👤)
-- Track dependencies with `task block`
+### 4. Task Complexity Assessment
+- Estimate effort for each task (not whole issues)
+- Identify task dependencies within and across issues
+- Detect blocking manual tasks
+- Assign task IDs in format `#<issue>-<task>` (e.g., #47-3)
 
-### 5. Prepare Work Queue
-- Add all ready issues to queue with `task add`
-- Prioritize based on dependencies
-- Separate manual vs automated work
-- Set up blocking relationships
+### 5. Prepare Task Queue
+- Extract all tasks from issue checklists
+- Add tasks to queue with `task add`
+- Set up dependency relationships
+- Prioritize based on:
+  - Unblocked tasks first
+  - Manual tasks that unblock others
+  - Logical development order
+
+## New Architecture: Task-Based Parallelism
+
+Instead of creating sub-issues, we now:
+- Use issues as containers for related work
+- Break work into checklist tasks within issues
+- Each checklist item becomes a parallel work unit
+- PRs update checklist items, not close issues
+- Issues close only when all tasks complete
 
 ## Example Output
 ```
@@ -45,30 +60,52 @@ Analyzing codebase...
 ✓ Detected Jest tests and GitHub Actions CI
 
 Fetching GitHub issues...
-✓ Found 47 open issues
+✓ Found 12 open issues
+✓ No issues found - creating initial issues...
 
-Breaking down complex issues...
-✓ Created 23 sub-issues for large tasks
-✓ Added size labels to all issues
+Breaking down into tasks...
+Issue #1: User Authentication
+  ✓ Created 6 tasks (4 claude-work, 2 manual-work)
+Issue #2: API Rate Limiting  
+  ✓ Created 4 tasks (3 claude-work, 1 manual-work)
 
-Identifying dependencies...
-✓ Found 8 blocking relationships
-✓ 5 manual tasks block automated work
+Analyzing task dependencies...
+✓ Identified 5 task dependencies
+✓ 3 manual tasks block automated work
 
-Preparing work queue...
-✓ Added 35 automated tasks to queue
-✓ Prioritized based on dependencies
+Preparing task queue...
+✓ Added 23 tasks to queue
+✓ 14 tasks ready to start
+✓ 9 tasks blocked
 
-Setup complete! Ready for parallel execution.
-- Total tasks: 47 (12 manual, 35 automated)
-- Blocked tasks: 8 (waiting on manual work)
-- Ready to start: 27
+Setup complete! Ready for task-based parallel execution.
+- Total tasks: 23 (7 manual, 16 automated)
+- Ready to start: 14
+- Blocked tasks: 9
 
 Run /project:work to begin parallel development!
+```
+
+## Task Checklist Format
+
+Tasks are added to issues as markdown checklists:
+
+```markdown
+## Tasks
+
+### Claude Work
+- [ ] Implement user model and database schema
+- [ ] Create authentication service with JWT
+- [ ] Add login/logout API endpoints
+- [ ] Write unit tests for auth service
+
+### Manual Work  
+- [ ] 👤 Choose authentication strategy (OAuth vs local)
+- [ ] 👤 Set up authentication provider credentials
 ```
 
 ## Next Steps
 After setup completes:
 1. Review manual tasks with `/project:manual`
 2. Start parallel work with `/project:work`
-3. Monitor progress with `/project:status`
+3. Monitor task progress with `/project:status`

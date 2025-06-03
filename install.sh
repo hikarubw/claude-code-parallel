@@ -9,7 +9,12 @@ set -euo pipefail
 
 # Configuration
 readonly REPO="hikarubw/claude-code-parallel"
-readonly VERSION="1.0.1"
+# Read version from VERSION file if available, otherwise fetch from repo
+if [ -f "VERSION" ]; then
+    readonly VERSION=$(cat VERSION)
+else
+    readonly VERSION=$(curl -fsSL "https://raw.githubusercontent.com/$REPO/main/VERSION" 2>/dev/null || echo "2.0.0")
+fi
 readonly BASE_URL="https://raw.githubusercontent.com/$REPO/main"
 
 # Tools and commands to install

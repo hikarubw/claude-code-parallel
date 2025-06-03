@@ -17,38 +17,62 @@
 
 ## Future Directions
 
-### Near Term (v2.1.0)
-- **Enhanced Manual Work Detection**
-  - Automatic GitHub issue state monitoring
-  - Smart unblocking of dependent tasks
-  - Better manual work guidance
+### Near Term (v2.1.0) - Task-Based Architecture + Claude Code Enhancements
+- **Transform to Task-Based Parallelism**
+  - GitHub issue checklists as work units
+  - Each checkbox = parallel task
+  - Visual progress tracking
+  - Timeline: 3 weeks (~40 hours)
   
-- **Performance Optimizations**
-  - Session pooling for faster startup
-  - Improved resource management
-  - Better handling of 10+ parallel sessions
+- **Core Tool Updates**
+  - `github`: Parse and update checklists
+  - `task`: New format (#47-1 instead of #47)
+  - `session`: Task-specific branches
+  
+- **New Commands**
+  - `/project:setup-tasks`: Convert issue to tasks
+  - `/project:work-on #47-1`: Start specific task
+  - `/project:task-status`: Cross-issue task view
+  
+- **Claude Code Integration Enhancements** 🆕
+  - **Extended Thinking**: Add prompts for complex task planning
+  - **Continue Command**: `/project:continue [session-id]` to resume sessions
+  - **Screenshot Support**: Document visual debugging workflows
+  - **Error Recovery**: Enhanced error handling with visual aids
+
+- **Session Management Improvements** 🆕
+  - **Multi-pane Sessions**: Use tmux panes instead of separate sessions
+  - **Single Session Architecture**: One tmux session with multiple panes
+  - **Benefits**: Better resource usage, easier monitoring, simpler management
+  - **Implementation**: Each task gets a pane within claude-parallel session
 
 ### Medium Term (v2.2.0)
-- **Background Services**
-  - Daemon mode for continuous monitoring
-  - Event-driven task assignment
-  - Health monitoring dashboard
+- **Task Automation**
+  - Auto-update checklists on PR merge
+  - Smart task dependency resolution
+  - Bulk task operations
   
-- **Workflow Intelligence**
-  - Learn from PR patterns
-  - Suggest optimal parallelism levels
-  - Automatic work type detection
+- **Performance & Scale**
+  - Session pooling for instant starts
+  - Handle 20+ parallel tasks
+  - Resource optimization
+  
+- **Claude Code Advanced Features** 🆕
+  - **MCP Integration**: Detect and use available MCP tools
+  - **Project Memory**: Auto-generate CLAUDE.md for each project
+  - **Version Detection**: Ensure Claude Code compatibility
+  - **Image Workflows**: Process architecture diagrams and UI mockups
 
 ### Long Term (v3.0.0)
-- **Team Features**
-  - Multi-developer coordination
-  - Shared work queues
-  - Conflict resolution assistance
+- **Advanced Architectures**
+  - Dependency Graph: Auto-discover work from code
+  - Intent-Directed: Focus on business value
+  - See ARCHITECTURE_MEMO.md for details
   
-- **Extensibility**
-  - Plugin system for custom tools
-  - Integration with other AI assistants
-  - Custom workflow definitions
+- **Team Coordination**
+  - Multi-Claude collaboration
+  - Shared task queues
+  - Conflict prevention
 
 ## Recently Completed (v2.0.0)
 
@@ -56,6 +80,12 @@
 - Worktree isolation enables freedom
 - Permissive settings in worktrees
 - Maintained safety through PR gateway
+
+### ✅ Claude Code Architecture Alignment (Code Review)
+- Perfect slash command implementation
+- Proper `$ARGUMENTS` usage throughout
+- Follows "simple tools + intelligent orchestration"
+- Architecture score: 95/100
 
 ### ✅ Intelligent Branch Management
 - Claude decides branch names based on content
@@ -92,6 +122,9 @@ See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 - Developer satisfaction
 - Code quality consistency
 - Approval interruption rate (target: <10%)
+- Claude Code feature utilization rate 🆕
+- Extended thinking usage for complex tasks 🆕
+- Session recovery success rate 🆕
 
 ---
 

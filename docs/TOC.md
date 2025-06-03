@@ -9,8 +9,9 @@
 
 ### Core Concepts
 4. **[Architecture Overview](ARCHITECTURE.md)** - System design and components
-5. **[Autonomous Operation](AUTONOMOUS_OPERATION.md)** - How worktree isolation enables autonomy
-6. **[Workflow Guide](WORKFLOW.md)** - Common development patterns
+5. **[Task-Based Architecture](TASK_BASED_ARCHITECTURE.md)** - Next-gen parallel approach
+6. **[Autonomous Operation](AUTONOMOUS_OPERATION.md)** - How worktree isolation enables autonomy
+7. **[Workflow Guide](WORKFLOW.md)** - Common development patterns
 
 ### Reference
 7. **[Commands Reference](../commands/)** - All slash commands
@@ -21,7 +22,8 @@
    - [maintain](../commands/maintain.md) - Clean up resources
    - [auto](../commands/auto.md) - Autonomous mode
 
-8. **[Tools Reference](../tools/)** - All available tools
+### Tools & Commands
+13. **[Tools Reference](../tools/)** - All available tools
    - [task](../tools/task) - Queue management
    - [session](../tools/session) - tmux control
    - [github](../tools/github) - GitHub integration
@@ -29,9 +31,11 @@
    - [setup-autonomous](../tools/setup-autonomous) - Permission management
 
 ### Development
-9. **[Roadmap](ROADMAP.md)** - Future directions
-10. **[Contributing](../CONTRIBUTING.md)** - How to contribute
-11. **[Ideas](../IDEAS.md)** - Experimental concepts
+8. **[Roadmap](ROADMAP.md)** - Future directions & task-based plan
+9. **[Architecture Memo](ARCHITECTURE_MEMO.md)** - Architecture decisions
+10. **[Future Ideas](FUTURE_IDEAS_MEMO.md)** - Long-term concepts
+11. **[Contributing](../CONTRIBUTING.md)** - How to contribute
+12. **[Ideas](../IDEAS.md)** - Experimental concepts
 
 ### Other Resources
 - **[Changelog](../CHANGELOG.md)** - Version history
