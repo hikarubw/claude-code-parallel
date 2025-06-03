@@ -13,6 +13,7 @@ Arguments: $ARGUMENTS
 - Read configuration files (package.json, etc.)
 - Map module organization and dependencies
 - Identify test patterns and CI/CD setup
+- **Extended thinking**: For complex architectures, I'll think deeply about component relationships
 
 ### 2. Create or Fetch GitHub Issues
 - Check for existing open issues
@@ -103,6 +104,14 @@ Tasks are added to issues as markdown checklists:
 - [ ] 👤 Choose authentication strategy (OAuth vs local)
 - [ ] 👤 Set up authentication provider credentials
 ```
+
+## Extended Thinking Usage
+When dealing with complex projects, leverage Claude Code's extended thinking:
+- Say "think about the architecture" for deep codebase analysis
+- Say "think harder about dependencies" for intricate relationships
+- Say "think more" if initial analysis seems incomplete
+
+📚 **Reference**: [Extended Thinking in Claude Code](https://docs.anthropic.com/en/docs/claude-code/tutorials#extended-thinking)
 
 ## Next Steps
 After setup completes:
