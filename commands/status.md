@@ -6,6 +6,15 @@ Usage: /project:status [what]
 
 Arguments: $ARGUMENTS
 
+## Screenshot Support
+📸 **Claude Code Tip**: Take a screenshot of your terminal showing the status output and paste it directly into Claude Code. I can analyze the visual output to:
+- Identify stuck or idle sessions
+- Spot patterns in blocked tasks
+- Suggest optimizations based on visual cues
+- Debug issues with parallel execution
+
+**How to use**: Simply paste a screenshot after running this command for visual analysis.
+
 ## Dashboard Sections
 
 ### Overview
@@ -120,3 +129,16 @@ This command can be run repeatedly to monitor progress:
 ```bash
 watch -n 60 'claude /project:status'
 ```
+
+## Visual Debugging with Screenshots
+When troubleshooting parallel execution issues:
+1. Run `/project:status` to see current state
+2. Take a screenshot of the output
+3. Paste it into Claude Code with your question
+4. I can visually analyze:
+   - Session states and durations
+   - Queue backlogs
+   - Blocking patterns
+   - Resource usage trends
+
+📚 **Reference**: [Working with Images in Claude Code](https://docs.anthropic.com/en/docs/claude-code/tutorials#working-with-images)

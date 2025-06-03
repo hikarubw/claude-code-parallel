@@ -34,6 +34,12 @@ Arguments: $ARGUMENTS
    - Issues stay open until all tasks complete
    - Better granularity than issue-based approach
 
+5. **Error Detection & Recovery**
+   - Monitor for stuck or failing sessions
+   - Automatically retry with different approaches
+   - Escalate persistent failures for manual help
+   - Use extended thinking for complex debugging
+
 ## Options Parsing
 I'll parse your arguments for:
 - Number of sessions (first number)
@@ -93,8 +99,34 @@ Each task PR will:
 - Labels: Inherit from parent issue
 - Auto-updates checklist on merge
 
+## Error Recovery & Continuation
+Claude Code's continuation features are perfect for parallel work:
+- **Session interruption**: Use `claude --continue` to resume the last session
+- **Specific session recovery**: Use `claude --resume` to pick a session to continue
+- **Stuck sessions**: I can detect and recover stuck sessions automatically
+- **Failed tasks**: I'll retry with different approaches or escalate for manual help
+
+### Common Recovery Scenarios
+1. **Claude Code crashes during work**:
+   ```bash
+   claude --continue  # Resumes exactly where you left off
+   ```
+
+2. **Need to switch between parallel sessions**:
+   ```bash
+   claude --resume   # Shows list of sessions to choose from
+   ```
+
+3. **Session stuck on failing tests**:
+   - I'll detect repeated failures
+   - Try alternative solutions
+   - Flag for manual intervention if needed
+
+📚 **Reference**: [Resuming Conversations](https://docs.anthropic.com/en/docs/claude-code/tutorials#resuming-previous-conversations)
+
 ## Tips
 - Use `/project:status` to see task progress
 - Use `/project:manual` to complete manual tasks
 - Tasks complete faster than full issues
 - Better parallelism with smaller work units
+- Leverage `--continue` for seamless work resumption
