@@ -1,0 +1,243 @@
+#!/bin/bash
+# Maintenance and cleanup operations
+
+CLAUDE_DIR=".claude"
+WORKTREE_BASE=".worktrees"
+SESSION_PREFIX="claude"
+KEEP_DAYS="${KEEP_DAYS:-7}"
+
+case "$1" in
+    clean)
+        # Clean specific resources
+        what="${2:-all}"
+        dry_run=""
+        if [ "$3" = "--dry-run" ]; then
+            dry_run="yes"
+            echo "=== DRY RUN - No changes will be made ==="
+        fi
+        
+        case "$what" in
+            worktrees)
+                echo "Cleaning worktrees..."
+                count=0
+                
+                for worktree in "$WORKTREE_BASE"/*; do
+                    if [ -d "$worktree" ]; then
+                        issue=$(basename "$worktree")
+                        remove=""
+                        reason=""
+                        
+                        # Check if PR merged
+                        pr_state=$(gh pr list --search "$issue in:title" --state merged --json number --jq '.[0].number // empty' 2>/dev/null)
+                        if [ -n "$pr_state" ]; then
+                            remove="yes"
+                            reason="PR merged"
+                        fi
+                        
+                        # Check if issue closed
+                        if [ -z "$remove" ]; then
+                            issue_state=$(gh issue view "$issue" --json state --jq '.state' 2>/dev/null)
+                            if [ "$issue_state" = "CLOSED" ]; then
+                                remove="yes"
+                                reason="Issue closed"
+                            fi
+                        fi
+                        
+                        # Check age
+                        if [ -z "$remove" ] && [ -n "$KEEP_DAYS" ]; then
+                            age_days=$(find "$worktree" -maxdepth 0 -mtime +$KEEP_DAYS 2>/dev/null | wc -l)
+                            if [ "$age_days" -gt 0 ]; then
+                                remove="yes"
+                                reason="Older than $KEEP_DAYS days"
+                            fi
+                        fi
+                        
+                        if [ "$remove" = "yes" ]; then
+                            echo "  $issue - $reason"
+                            if [ -z "$dry_run" ]; then
+                                git worktree remove "$worktree" --force 2>/dev/null
+                                ((count++))
+                            fi
+                        fi
+                    fi
+                done
+                
+                if [ -z "$dry_run" ]; then
+                    git worktree prune
+                    echo "Cleaned $count worktrees"
+                fi
+                ;;
+            
+            sessions)
+                echo "Cleaning idle sessions..."
+                count=0
+                
+                tmux ls 2>/dev/null | grep "^$SESSION_PREFIX-" | while read -r line; do
+                    session=$(echo "$line" | cut -d: -f1)
+                    
+                    # Check if session is idle
+                    panes=$(tmux list-panes -t "$session" -F '#{pane_current_command}' 2>/dev/null | grep -v bash | wc -l)
+                    if [ "$panes" -eq 0 ]; then
+                        echo "  $session - idle"
+                        if [ -z "$dry_run" ]; then
+                            tmux kill-session -t "$session"
+                            ((count++))
+                        fi
+                    fi
+                done
+                
+                if [ -z "$dry_run" ]; then
+                    echo "Cleaned $count sessions"
+                fi
+                ;;
+            
+            data)
+                echo "Cleaning old data..."
+                if [ -z "$dry_run" ]; then
+                    # Clean old logs
+                    find "$CLAUDE_DIR" -name "*.log" -mtime +$KEEP_DAYS -delete 2>/dev/null
+                    
+                    # Archive old tracking data
+                    for file in "$CLAUDE_DIR/tasks/queue" "$CLAUDE_DIR/sessions/tracking"; do
+                        if [ -f "$file" ] && [ -s "$file" ]; then
+                            # Keep only recent entries
+                            tail -100 "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+                        fi
+                    done
+                    
+                    echo "Cleaned old data (kept last $KEEP_DAYS days)"
+                else
+                    find "$CLAUDE_DIR" -name "*.log" -mtime +$KEEP_DAYS 2>/dev/null | wc -l | xargs echo "  Log files to remove:"
+                fi
+                ;;
+            
+            all)
+                # Clean everything
+                "$0" clean worktrees $3
+                "$0" clean sessions $3
+                "$0" clean data $3
+                ;;
+            
+            *)
+                echo "Usage: maintain clean <worktrees|sessions|data|all> [--dry-run]"
+                ;;
+        esac
+        ;;
+    
+    status)
+        # Show maintenance status
+        echo "=== Maintenance Status ==="
+        echo ""
+        
+        # Worktrees
+        echo "Worktrees:"
+        total_wt=$(find "$WORKTREE_BASE" -maxdepth 1 -type d | grep -v "^$WORKTREE_BASE$" | wc -l)
+        echo "  Total: $total_wt"
+        
+        # Check cleanable worktrees
+        cleanable=0
+        for worktree in "$WORKTREE_BASE"/*; do
+            if [ -d "$worktree" ]; then
+                issue=$(basename "$worktree")
+                
+                # Check if cleanable
+                pr_merged=$(gh pr list --search "$issue in:title" --state merged --json number --jq '.[0].number // empty' 2>/dev/null)
+                issue_closed=$(gh issue view "$issue" --json state --jq '.state' 2>/dev/null)
+                
+                if [ -n "$pr_merged" ] || [ "$issue_closed" = "CLOSED" ]; then
+                    ((cleanable++))
+                fi
+            fi
+        done
+        echo "  Can clean: $cleanable"
+        
+        echo ""
+        echo "Sessions:"
+        active=$(tmux ls 2>/dev/null | grep "^$SESSION_PREFIX-" | wc -l || echo 0)
+        echo "  Active: $active"
+        
+        idle=0
+        tmux ls 2>/dev/null | grep "^$SESSION_PREFIX-" | while read -r line; do
+            session=$(echo "$line" | cut -d: -f1)
+            panes=$(tmux list-panes -t "$session" -F '#{pane_current_command}' 2>/dev/null | grep -v bash | wc -l)
+            if [ "$panes" -eq 0 ]; then
+                ((idle++))
+            fi
+        done
+        echo "  Idle: $idle"
+        
+        echo ""
+        echo "Disk usage:"
+        du -sh "$WORKTREE_BASE" 2>/dev/null | cut -f1 | xargs echo "  Worktrees:" || echo "  Worktrees: 0"
+        du -sh "$CLAUDE_DIR" 2>/dev/null | cut -f1 | xargs echo "  Claude data:" || echo "  Claude data: 0"
+        
+        echo ""
+        echo "Old data:"
+        old_logs=$(find "$CLAUDE_DIR" -name "*.log" -mtime +$KEEP_DAYS 2>/dev/null | wc -l)
+        echo "  Log files (>$KEEP_DAYS days): $old_logs"
+        ;;
+    
+    prune)
+        # Aggressive cleanup
+        days="${2:-$KEEP_DAYS}"
+        KEEP_DAYS="$days"
+        
+        echo "Pruning data older than $days days..."
+        "$0" clean all
+        
+        # Additional aggressive cleanup
+        find "$CLAUDE_DIR" -type f -mtime +$days -delete 2>/dev/null
+        find "$WORKTREE_BASE" -type d -mtime +$days -exec rm -rf {} + 2>/dev/null
+        
+        echo "Pruning complete"
+        ;;
+    
+    report)
+        # Detailed usage report
+        echo "=== Usage Report ==="
+        echo ""
+        
+        # Session history
+        if [ -f "$CLAUDE_DIR/sessions/tracking" ]; then
+            echo "Recent sessions:"
+            tail -10 "$CLAUDE_DIR/sessions/tracking" | while IFS='|' read -r session ts status issue; do
+                date_str=$(date -d "@$ts" "+%Y-%m-%d %H:%M" 2>/dev/null || date -r "$ts" "+%Y-%m-%d %H:%M" 2>/dev/null)
+                echo "  $session: $status ${issue:+(issue: $issue)} at $date_str"
+            done
+        fi
+        
+        echo ""
+        
+        # Task statistics
+        if [ -d "$CLAUDE_DIR/tasks" ]; then
+            approved=$(wc -l < "$CLAUDE_DIR/tasks/approved.log" 2>/dev/null || echo 0)
+            rejected=$(wc -l < "$CLAUDE_DIR/tasks/rejected.log" 2>/dev/null || echo 0)
+            
+            echo "Task statistics:"
+            echo "  Approved: $approved"
+            echo "  Rejected: $rejected"
+            
+            if [ $((approved + rejected)) -gt 0 ]; then
+                rate=$((approved * 100 / (approved + rejected)))
+                echo "  Approval rate: ${rate}%"
+            fi
+        fi
+        
+        echo ""
+        "$0" status
+        ;;
+    
+    *)
+        echo "Usage: maintain <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  clean [what] [--dry-run]  - Clean resources"
+        echo "    worktrees               - Remove merged/closed worktrees"
+        echo "    sessions                - Kill idle sessions"
+        echo "    data                    - Clean old logs and data"
+        echo "    all                     - Clean everything"
+        echo "  status                    - Show what needs cleaning"
+        echo "  prune [days]              - Aggressive cleanup"
+        echo "  report                    - Detailed usage report"
+        ;;
+esac

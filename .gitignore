@@ -1,0 +1,28 @@
+# macOS
+.DS_Store
+
+# Temporary files
+.tmp/
+tmp/
+temp/
+
+# Generated files
+dist/
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Dependencies
+node_modules/
+
+# Local settings
+.env
+.env.local
+
+# Test artifacts
+coverage/
+.nyc_output/

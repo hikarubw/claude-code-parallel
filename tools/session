@@ -1,0 +1,184 @@
+#!/bin/bash
+# Unified session management - tmux sessions with worktrees
+
+SESSION_DIR=".claude/sessions"
+SESSION_PREFIX="claude"
+WORKTREE_BASE=".worktrees"
+mkdir -p "$SESSION_DIR" "$WORKTREE_BASE"
+
+case "$1" in
+    start)
+        # Start N sessions with worktrees
+        count="${2:-3}"
+        started=0
+        
+        for i in $(seq 1 $count); do
+            session_name="$SESSION_PREFIX-$i"
+            
+            # Create tmux session
+            if tmux new -d -s "$session_name" 2>/dev/null; then
+                echo "$session_name|$(date +%s)|idle|" >> "$SESSION_DIR/tracking"
+                echo "Started session: $session_name"
+                ((started++))
+            fi
+        done
+        
+        echo "Started $started sessions"
+        ;;
+    
+    stop)
+        # Stop sessions and clean worktrees
+        target="${2:-all}"
+        
+        if [ "$target" = "all" ]; then
+            # Stop all sessions
+            tmux ls 2>/dev/null | grep "^$SESSION_PREFIX-" | cut -d: -f1 | while read session; do
+                # Get associated issue
+                issue=$(grep "^$session|" "$SESSION_DIR/tracking" 2>/dev/null | cut -d'|' -f4)
+                
+                # Clean worktree if exists
+                if [ -n "$issue" ] && [ -d "$WORKTREE_BASE/$issue" ]; then
+                    echo "Removing worktree for $issue"
+                    git worktree remove "$WORKTREE_BASE/$issue" --force 2>/dev/null
+                fi
+                
+                # Kill session
+                tmux kill-session -t "$session"
+                echo "Stopped session: $session"
+            done
+            
+            > "$SESSION_DIR/tracking"
+            echo "All sessions stopped"
+        else
+            # Stop specific session
+            session_name="$SESSION_PREFIX-$target"
+            issue=$(grep "^$session_name|" "$SESSION_DIR/tracking" 2>/dev/null | cut -d'|' -f4)
+            
+            if [ -n "$issue" ] && [ -d "$WORKTREE_BASE/$issue" ]; then
+                git worktree remove "$WORKTREE_BASE/$issue" --force 2>/dev/null
+            fi
+            
+            tmux kill-session -t "$session_name" 2>/dev/null && echo "Stopped: $session_name"
+            grep -v "^$session_name|" "$SESSION_DIR/tracking" > "$SESSION_DIR/tracking.tmp" 2>/dev/null || true
+            mv "$SESSION_DIR/tracking.tmp" "$SESSION_DIR/tracking" 2>/dev/null || true
+        fi
+        ;;
+    
+    assign)
+        # Assign issue to session with worktree
+        session_id="$2"
+        issue="$3"
+        session_name="$SESSION_PREFIX-$session_id"
+        worktree_path="$WORKTREE_BASE/$issue"
+        branch="claude/$issue"
+        
+        # Create worktree if needed
+        if [ ! -d "$worktree_path" ]; then
+            echo "Creating worktree for $issue"
+            git worktree add "$worktree_path" -b "$branch" 2>/dev/null || \
+            git worktree add "$worktree_path" "$branch" 2>/dev/null || \
+            git worktree add "$worktree_path"
+        fi
+        
+        # Update tracking
+        grep -v "^$session_name|" "$SESSION_DIR/tracking" > "$SESSION_DIR/tracking.tmp" 2>/dev/null || true
+        echo "$session_name|$(date +%s)|working|$issue" >> "$SESSION_DIR/tracking.tmp"
+        mv "$SESSION_DIR/tracking.tmp" "$SESSION_DIR/tracking"
+        
+        # Send Claude to worktree
+        tmux send -t "$session_name" "cd $(pwd)/$worktree_path" Enter
+        tmux send -t "$session_name" "claude /work-on $issue" Enter
+        
+        echo "Assigned $issue to $session_name"
+        echo "Worktree: $worktree_path"
+        ;;
+    
+    free)
+        # Mark session as free
+        session_id="$2"
+        session_name="$SESSION_PREFIX-$session_id"
+        
+        grep -v "^$session_name|" "$SESSION_DIR/tracking" > "$SESSION_DIR/tracking.tmp" 2>/dev/null || true
+        echo "$session_name|$(date +%s)|idle|" >> "$SESSION_DIR/tracking.tmp"
+        mv "$SESSION_DIR/tracking.tmp" "$SESSION_DIR/tracking"
+        
+        echo "Freed $session_name"
+        ;;
+    
+    list)
+        # List sessions with their status
+        echo "=== Active Sessions ==="
+        
+        if [ -s "$SESSION_DIR/tracking" ]; then
+            echo "Session|Status|Issue|Worktree"
+            echo "-------|------|-----|--------"
+            
+            while IFS='|' read -r session ts status issue; do
+                if tmux has-session -t "$session" 2>/dev/null; then
+                    worktree=""
+                    if [ -n "$issue" ]; then
+                        worktree="$WORKTREE_BASE/$issue"
+                    fi
+                    echo "$session|$status|${issue:-none}|$worktree"
+                fi
+            done < "$SESSION_DIR/tracking"
+        else
+            echo "No active sessions"
+        fi
+        
+        # Show worktrees
+        echo ""
+        echo "=== Worktrees ==="
+        git worktree list 2>/dev/null | grep -v "bare" || echo "No worktrees"
+        ;;
+    
+    enter)
+        # Attach to session
+        session_id="${2:-1}"
+        session_name="$SESSION_PREFIX-$session_id"
+        tmux attach -t "$session_name"
+        ;;
+    
+    clean)
+        # Clean orphaned worktrees
+        echo "Cleaning orphaned worktrees..."
+        
+        # Remove worktrees for closed/merged issues
+        for worktree in "$WORKTREE_BASE"/*; do
+            if [ -d "$worktree" ]; then
+                issue=$(basename "$worktree")
+                
+                # Check if PR merged
+                pr_state=$(gh pr list --search "$issue in:title" --state merged --json number --jq '.[0].number // empty' 2>/dev/null)
+                if [ -n "$pr_state" ]; then
+                    echo "Removing merged PR worktree: $issue"
+                    git worktree remove "$worktree" --force 2>/dev/null
+                    continue
+                fi
+                
+                # Check if issue closed
+                issue_state=$(gh issue view "$issue" --json state --jq '.state' 2>/dev/null)
+                if [ "$issue_state" = "CLOSED" ]; then
+                    echo "Removing closed issue worktree: $issue"
+                    git worktree remove "$worktree" --force 2>/dev/null
+                fi
+            fi
+        done
+        
+        git worktree prune
+        echo "Cleanup complete"
+        ;;
+    
+    *)
+        echo "Usage: session <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  start [N]              - Start N sessions (default: 3)"
+        echo "  stop [ID|all]          - Stop session(s) and clean worktrees"
+        echo "  assign ID ISSUE        - Assign issue to session with worktree"
+        echo "  free ID                - Mark session as free"
+        echo "  list                   - Show all sessions and worktrees"
+        echo "  enter [ID]             - Attach to session (default: 1)"
+        echo "  clean                  - Clean orphaned worktrees"
+        ;;
+esac

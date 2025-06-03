@@ -1,0 +1,140 @@
+#!/bin/bash
+# Enhanced GitHub operations including sub-issue management
+
+case "$1" in
+    issues)
+        # List issues with filters
+        filter="${2:---open}"
+        
+        case "$filter" in
+            --open)
+                gh issue list --state open --json number,title,labels,assignees --limit 100
+                ;;
+            --closed)
+                gh issue list --state closed --json number,title,labels --limit 50
+                ;;
+            --manual)
+                gh issue list --label "manual-work" --state open --json number,title,assignees
+                ;;
+            --automated)
+                gh issue list --label "claude-work" --state open --json number,title,labels
+                ;;
+            *)
+                # Specific issue
+                gh issue view "$filter" --json number,title,labels,state,body,comments
+                ;;
+        esac
+        ;;
+    
+    create-issue)
+        # Create new issue
+        title="$2"
+        body="$3"
+        labels="${4:-}"
+        
+        if [ -n "$labels" ]; then
+            gh issue create --title "$title" --body "$body" --label "$labels"
+        else
+            gh issue create --title "$title" --body "$body"
+        fi
+        ;;
+    
+    split)
+        # Create sub-issues for complex work
+        parent="$2"
+        echo "Creating sub-issues for #$parent..."
+        
+        # This is a placeholder - Claude will analyze and create appropriate sub-issues
+        echo "Claude will analyze issue #$parent and create sub-issues"
+        ;;
+    
+    link)
+        # Link child to parent issue
+        child="$2"
+        parent="$3"
+        
+        # Get current body
+        current_body=$(gh issue view "$child" --json body --jq '.body')
+        
+        # Add parent reference if not already there
+        if ! echo "$current_body" | grep -q "Parent: #$parent"; then
+            new_body="Parent: #$parent
+
+$current_body"
+            gh issue edit "$child" --body "$new_body"
+            echo "Linked #$child to parent #$parent"
+        else
+            echo "#$child already linked to parent"
+        fi
+        ;;
+    
+    children)
+        # List children of an issue
+        parent="$2"
+        echo "Children of #$parent:"
+        gh issue list --search "Parent: #$parent in:body" --json number,title,state | \
+            jq -r '.[] | "  #\(.number): \(.title) [\(.state)]"' || echo "  No children found"
+        ;;
+    
+    pr-status)
+        # Check PR status for issue
+        issue="$2"
+        
+        # Search for PR with issue number
+        pr_data=$(gh pr list --search "$issue in:title OR $issue in:body" --json number,state,mergeable,url --jq '.[0] // empty')
+        
+        if [ -n "$pr_data" ]; then
+            echo "$pr_data" | jq -r '"PR #\(.number): \(.state)"'
+            echo "$pr_data" | jq -r '"Mergeable: \(.mergeable)"'
+            echo "$pr_data" | jq -r '"URL: \(.url)"'
+        else
+            echo "No PR found for issue #$issue"
+        fi
+        ;;
+    
+    label)
+        # Add label to issue
+        issue="$2"
+        label="$3"
+        gh issue edit "$issue" --add-label "$label"
+        echo "Added label '$label' to #$issue"
+        ;;
+    
+    close)
+        # Close issue with comment
+        issue="$2"
+        comment="${3:-Completed}"
+        gh issue close "$issue" --comment "$comment"
+        ;;
+    
+    recent)
+        # Get recently created issues
+        minutes="${2:-30}"
+        since=$(date -u -d "$minutes minutes ago" '+%Y-%m-%dT%H:%M:%SZ' 2>/dev/null || \
+                date -u -v-${minutes}M '+%Y-%m-%dT%H:%M:%SZ')
+        
+        echo "Issues created in last $minutes minutes:"
+        gh issue list --search "created:>$since" --json number,title,author | \
+            jq -r '.[] | "  #\(.number): \(.title) (by \(.author.login))"'
+        ;;
+    
+    *)
+        echo "Usage: github <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  issues [filter]           - List issues"
+        echo "    --open                  - Open issues (default)"
+        echo "    --closed                - Closed issues"
+        echo "    --manual                - Manual work only"
+        echo "    --automated             - Automated work only"
+        echo "    NUMBER                  - Specific issue details"
+        echo "  create-issue TITLE BODY [LABELS] - Create issue"
+        echo "  split PARENT              - Create sub-issues"
+        echo "  link CHILD PARENT         - Link issues"
+        echo "  children PARENT           - List child issues"
+        echo "  pr-status ISSUE           - Check PR for issue"
+        echo "  label ISSUE LABEL         - Add label"
+        echo "  close ISSUE [COMMENT]     - Close issue"
+        echo "  recent [MINUTES]          - Recent issues"
+        ;;
+esac

@@ -1,0 +1,205 @@
+#!/bin/bash
+# Unified task management - queue, approval, and blocking
+
+TASK_DIR=".claude/tasks"
+QUEUE_FILE="$TASK_DIR/queue"
+APPROVED_FILE="$TASK_DIR/approved.log"
+REJECTED_FILE="$TASK_DIR/rejected.log"
+BLOCKING_FILE="$TASK_DIR/blocking"
+mkdir -p "$TASK_DIR"
+
+case "$1" in
+    add)
+        # Add task to queue
+        issue="$2"
+        priority="${3:-5}"
+        echo "$issue|$priority|$(date +%s)" >> "$QUEUE_FILE"
+        echo "Added $issue to queue (priority: $priority)"
+        ;;
+    
+    next)
+        # Get next available task (not blocked)
+        while IFS='|' read -r issue priority timestamp; do
+            # Check if blocked
+            blocked_by=$(grep "|$issue|" "$BLOCKING_FILE" 2>/dev/null | cut -d'|' -f1)
+            if [ -z "$blocked_by" ]; then
+                echo "$issue|$priority|$timestamp"
+                # Remove from queue
+                grep -v "^$issue|" "$QUEUE_FILE" > "$QUEUE_FILE.tmp" && mv "$QUEUE_FILE.tmp" "$QUEUE_FILE"
+                exit 0
+            fi
+        done < "$QUEUE_FILE"
+        echo "No unblocked tasks available"
+        exit 1
+        ;;
+    
+    approve)
+        # Approve task
+        issue="$2"
+        reason="${3:-Approved by Claude}"
+        echo "$(date +%s)|$issue|$reason|claude" >> "$APPROVED_FILE"
+        echo "✅ Approved: $issue - $reason"
+        ;;
+    
+    reject)
+        # Reject task
+        issue="$2"
+        reason="${3:-Needs manual review}"
+        echo "$(date +%s)|$issue|$reason|claude" >> "$REJECTED_FILE"
+        echo "❌ Rejected: $issue - $reason"
+        ;;
+    
+    block)
+        # Add blocking relationship
+        blocker="$2"
+        blocked="$3"
+        echo "$blocker|$blocked|$(date +%s)" >> "$BLOCKING_FILE"
+        echo "$blocker blocks $blocked"
+        ;;
+    
+    unblock)
+        # Remove blocking relationship
+        blocker="$2"
+        blocked="$3"
+        grep -v "^$blocker|$blocked|" "$BLOCKING_FILE" > "$BLOCKING_FILE.tmp" 2>/dev/null || true
+        mv "$BLOCKING_FILE.tmp" "$BLOCKING_FILE" 2>/dev/null || true
+        echo "Removed: $blocker no longer blocks $blocked"
+        ;;
+    
+    status)
+        # Check task status
+        issue="${2:-all}"
+        
+        if [ "$issue" = "all" ]; then
+            echo "=== Task Status ==="
+            echo "Queued: $(wc -l < "$QUEUE_FILE" 2>/dev/null | tr -d ' ' || echo 0)"
+            echo "Approved: $(wc -l < "$APPROVED_FILE" 2>/dev/null | tr -d ' ' || echo 0)"
+            echo "Rejected: $(wc -l < "$REJECTED_FILE" 2>/dev/null | tr -d ' ' || echo 0)"
+            
+            # Show blocking summary
+            blocking_count=$(wc -l < "$BLOCKING_FILE" 2>/dev/null | tr -d ' ' || echo 0)
+            if [ "$blocking_count" -gt 0 ]; then
+                echo ""
+                echo "Blocking relationships: $blocking_count"
+            fi
+        else
+            # Check specific issue
+            if grep -q "^$issue|" "$QUEUE_FILE" 2>/dev/null; then
+                echo "Status: Queued"
+            elif grep -q "|$issue|" "$APPROVED_FILE" 2>/dev/null; then
+                echo "Status: Approved"
+            elif grep -q "|$issue|" "$REJECTED_FILE" 2>/dev/null; then
+                echo "Status: Rejected"
+            else
+                echo "Status: Unknown"
+            fi
+            
+            # Check if blocked
+            blocked_by=$(grep "|$issue|" "$BLOCKING_FILE" 2>/dev/null | cut -d'|' -f1)
+            if [ -n "$blocked_by" ]; then
+                echo "Blocked by: $blocked_by"
+            fi
+        fi
+        ;;
+    
+    list)
+        # List tasks with optional filter
+        filter="$2"
+        
+        case "$filter" in
+            --blocked)
+                echo "=== Blocked Tasks ==="
+                grep -f <(cut -d'|' -f2 "$BLOCKING_FILE" 2>/dev/null) "$QUEUE_FILE" 2>/dev/null | \
+                while IFS='|' read -r issue priority timestamp; do
+                    blocked_by=$(grep "|$issue|" "$BLOCKING_FILE" | cut -d'|' -f1)
+                    echo "  $issue (blocked by: $blocked_by)"
+                done || echo "No blocked tasks"
+                ;;
+            
+            --approved)
+                echo "=== Recently Approved ==="
+                tail -10 "$APPROVED_FILE" 2>/dev/null | while IFS='|' read -r ts issue reason by; do
+                    echo "  $issue - $reason"
+                done || echo "No approvals"
+                ;;
+            
+            --manual-blocking)
+                echo "=== Manual Tasks Blocking Automation ==="
+                gh issue list --label "manual-work" --state open --json number --jq '.[].number' 2>/dev/null | \
+                while read manual; do
+                    blocked=$(grep "^$manual|" "$BLOCKING_FILE" 2>/dev/null | wc -l)
+                    if [ "$blocked" -gt 0 ]; then
+                        echo ""
+                        echo "🚨 #$manual blocks $blocked tasks:"
+                        grep "^$manual|" "$BLOCKING_FILE" | cut -d'|' -f2 | while read b; do
+                            echo "   → #$b"
+                        done
+                    fi
+                done || echo "No manual tasks blocking work"
+                ;;
+            
+            *)
+                # Default: show queue
+                echo "=== Task Queue ==="
+                if [ -s "$QUEUE_FILE" ]; then
+                    echo "Issue|Priority|Added"
+                    echo "------|---------|-----"
+                    while IFS='|' read -r issue priority timestamp; do
+                        date_str=$(date -d "@$timestamp" "+%Y-%m-%d %H:%M" 2>/dev/null || date -r "$timestamp" "+%Y-%m-%d %H:%M" 2>/dev/null)
+                        echo "$issue|$priority|$date_str"
+                    done < "$QUEUE_FILE"
+                else
+                    echo "Queue is empty"
+                fi
+                ;;
+        esac
+        ;;
+    
+    clear)
+        # Clear specific data
+        what="$2"
+        case "$what" in
+            queue)
+                > "$QUEUE_FILE"
+                echo "Cleared queue"
+                ;;
+            approvals)
+                > "$APPROVED_FILE"
+                > "$REJECTED_FILE"
+                echo "Cleared approval history"
+                ;;
+            blocking)
+                > "$BLOCKING_FILE"
+                echo "Cleared blocking relationships"
+                ;;
+            all)
+                > "$QUEUE_FILE"
+                > "$APPROVED_FILE"
+                > "$REJECTED_FILE"
+                > "$BLOCKING_FILE"
+                echo "Cleared all task data"
+                ;;
+            *)
+                echo "Usage: task clear <queue|approvals|blocking|all>"
+                ;;
+        esac
+        ;;
+    
+    *)
+        echo "Usage: task <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  add ISSUE [PRIORITY]      - Add task to queue"
+        echo "  next                      - Get next unblocked task"
+        echo "  approve ISSUE [REASON]    - Mark task approved"
+        echo "  reject ISSUE [REASON]     - Mark task rejected"
+        echo "  block BLOCKER BLOCKED     - Add blocking relationship"
+        echo "  unblock BLOCKER BLOCKED   - Remove blocking relationship"
+        echo "  status [ISSUE]            - Check task status"
+        echo "  list [--filter]           - List tasks"
+        echo "    --blocked               - Show blocked tasks"
+        echo "    --approved              - Show recent approvals"
+        echo "    --manual-blocking       - Show manual tasks blocking work"
+        echo "  clear <what>              - Clear data"
+        ;;
+esac
