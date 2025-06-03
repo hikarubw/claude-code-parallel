@@ -110,10 +110,6 @@ uninstall() {
         success "Removed .claude directory"
     fi
     
-    if [ -f "claude-tools" ]; then
-        rm -f claude-tools
-        success "Removed launcher script"
-    fi
     
     log "Uninstall complete"
 }
@@ -218,34 +214,6 @@ install() {
 EOF
     success "Settings configured"
     
-    # Create launcher script
-    log "Creating launcher script..."
-    cat > claude-tools << 'EOF'
-#!/bin/bash
-# Claude Code Parallel - Tool Launcher
-
-if [ -z "$1" ]; then
-    echo "Claude Code Parallel - Available tools:"
-    for tool in .claude/tools/*; do
-        [ -f "$tool" ] && echo "  $(basename "$tool")"
-    done
-    echo ""
-    echo "Usage: ./claude-tools <tool> [args]"
-    echo "Example: ./claude-tools task add 123"
-else
-    tool=".claude/tools/$1"
-    if [ -x "$tool" ]; then
-        shift
-        exec "$tool" "$@"
-    else
-        echo "Error: Unknown tool '$1'"
-        echo "Run ./claude-tools to see available tools"
-        exit 1
-    fi
-fi
-EOF
-    chmod +x claude-tools
-    success "Launcher created"
     
     # Create version file
     echo "$VERSION" > .claude/VERSION
@@ -261,8 +229,8 @@ EOF
         echo "  2. Run: /project:setup"
         echo ""
         echo "Manual usage:"
-        echo "  ./claude-tools task add 123"
-        echo "  ./claude-tools session start 3"
+        echo "  .claude/tools/task add 123"
+        echo "  .claude/tools/session start 3"
     else
         echo ""
         error "Installation incomplete - some files are missing"
