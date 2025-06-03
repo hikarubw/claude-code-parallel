@@ -1,5 +1,6 @@
 #!/bin/bash
 # Unified task management - queue, approval, and blocking
+# Supports task format: #47-1 (issue 47, task 1)
 
 TASK_DIR=".claude/tasks"
 QUEUE_FILE="$TASK_DIR/queue"
@@ -11,21 +12,21 @@ mkdir -p "$TASK_DIR"
 case "$1" in
     add)
         # Add task to queue
-        issue="$2"
+        task="$2"
         priority="${3:-5}"
-        echo "$issue|$priority|$(date +%s)" >> "$QUEUE_FILE"
-        echo "Added $issue to queue (priority: $priority)"
+        echo "$task|$priority|$(date +%s)" >> "$QUEUE_FILE"
+        echo "Added $task to queue (priority: $priority)"
         ;;
     
     next)
         # Get next available task (not blocked)
-        while IFS='|' read -r issue priority timestamp; do
+        while IFS='|' read -r task priority timestamp; do
             # Check if blocked
-            blocked_by=$(grep "|$issue|" "$BLOCKING_FILE" 2>/dev/null | cut -d'|' -f1)
+            blocked_by=$(grep "|$task|" "$BLOCKING_FILE" 2>/dev/null | cut -d'|' -f1)
             if [ -z "$blocked_by" ]; then
-                echo "$issue|$priority|$timestamp"
+                echo "$task|$priority|$timestamp"
                 # Remove from queue
-                grep -v "^$issue|" "$QUEUE_FILE" > "$QUEUE_FILE.tmp" && mv "$QUEUE_FILE.tmp" "$QUEUE_FILE"
+                grep -v "^$task|" "$QUEUE_FILE" > "$QUEUE_FILE.tmp" && mv "$QUEUE_FILE.tmp" "$QUEUE_FILE"
                 exit 0
             fi
         done < "$QUEUE_FILE"
@@ -35,18 +36,18 @@ case "$1" in
     
     approve)
         # Approve task
-        issue="$2"
+        task="$2"
         reason="${3:-Approved by Claude}"
-        echo "$(date +%s)|$issue|$reason|claude" >> "$APPROVED_FILE"
-        echo "✅ Approved: $issue - $reason"
+        echo "$(date +%s)|$task|$reason|claude" >> "$APPROVED_FILE"
+        echo "✅ Approved: $task - $reason"
         ;;
     
     reject)
         # Reject task
-        issue="$2"
+        task="$2"
         reason="${3:-Needs manual review}"
-        echo "$(date +%s)|$issue|$reason|claude" >> "$REJECTED_FILE"
-        echo "❌ Rejected: $issue - $reason"
+        echo "$(date +%s)|$task|$reason|claude" >> "$REJECTED_FILE"
+        echo "❌ Rejected: $task - $reason"
         ;;
     
     block)
@@ -68,9 +69,9 @@ case "$1" in
     
     status)
         # Check task status
-        issue="${2:-all}"
+        task="${2:-all}"
         
-        if [ "$issue" = "all" ]; then
+        if [ "$task" = "all" ]; then
             echo "=== Task Status ==="
             echo "Queued: $(wc -l < "$QUEUE_FILE" 2>/dev/null | tr -d ' ' || echo 0)"
             echo "Approved: $(wc -l < "$APPROVED_FILE" 2>/dev/null | tr -d ' ' || echo 0)"
@@ -83,19 +84,19 @@ case "$1" in
                 echo "Blocking relationships: $blocking_count"
             fi
         else
-            # Check specific issue
-            if grep -q "^$issue|" "$QUEUE_FILE" 2>/dev/null; then
+            # Check specific task
+            if grep -q "^$task|" "$QUEUE_FILE" 2>/dev/null; then
                 echo "Status: Queued"
-            elif grep -q "|$issue|" "$APPROVED_FILE" 2>/dev/null; then
+            elif grep -q "|$task|" "$APPROVED_FILE" 2>/dev/null; then
                 echo "Status: Approved"
-            elif grep -q "|$issue|" "$REJECTED_FILE" 2>/dev/null; then
+            elif grep -q "|$task|" "$REJECTED_FILE" 2>/dev/null; then
                 echo "Status: Rejected"
             else
                 echo "Status: Unknown"
             fi
             
             # Check if blocked
-            blocked_by=$(grep "|$issue|" "$BLOCKING_FILE" 2>/dev/null | cut -d'|' -f1)
+            blocked_by=$(grep "|$task|" "$BLOCKING_FILE" 2>/dev/null | cut -d'|' -f1)
             if [ -n "$blocked_by" ]; then
                 echo "Blocked by: $blocked_by"
             fi
@@ -110,31 +111,27 @@ case "$1" in
             --blocked)
                 echo "=== Blocked Tasks ==="
                 grep -f <(cut -d'|' -f2 "$BLOCKING_FILE" 2>/dev/null) "$QUEUE_FILE" 2>/dev/null | \
-                while IFS='|' read -r issue priority timestamp; do
-                    blocked_by=$(grep "|$issue|" "$BLOCKING_FILE" | cut -d'|' -f1)
-                    echo "  $issue (blocked by: $blocked_by)"
+                while IFS='|' read -r task priority timestamp; do
+                    blocked_by=$(grep "|$task|" "$BLOCKING_FILE" | cut -d'|' -f1)
+                    echo "  $task (blocked by: $blocked_by)"
                 done || echo "No blocked tasks"
                 ;;
             
             --approved)
                 echo "=== Recently Approved ==="
-                tail -10 "$APPROVED_FILE" 2>/dev/null | while IFS='|' read -r ts issue reason by; do
-                    echo "  $issue - $reason"
+                tail -10 "$APPROVED_FILE" 2>/dev/null | while IFS='|' read -r ts task reason by; do
+                    echo "  $task - $reason"
                 done || echo "No approvals"
                 ;;
             
             --manual-blocking)
                 echo "=== Manual Tasks Blocking Automation ==="
-                gh issue list --label "manual-work" --state open --json number --jq '.[].number' 2>/dev/null | \
-                while read manual; do
-                    blocked=$(grep "^$manual|" "$BLOCKING_FILE" 2>/dev/null | wc -l)
-                    if [ "$blocked" -gt 0 ]; then
-                        echo ""
-                        echo "🚨 #$manual blocks $blocked tasks:"
-                        grep "^$manual|" "$BLOCKING_FILE" | cut -d'|' -f2 | while read b; do
-                            echo "   → #$b"
-                        done
-                    fi
+                # Look for manual tasks (those with 👤 prefix in task IDs)
+                grep -E "👤.*\|" "$BLOCKING_FILE" 2>/dev/null | \
+                while IFS='|' read -r manual blocked timestamp; do
+                    echo ""
+                    echo "🚨 $manual blocks:"
+                    echo "   → $blocked"
                 done || echo "No manual tasks blocking work"
                 ;;
             
@@ -142,11 +139,11 @@ case "$1" in
                 # Default: show queue
                 echo "=== Task Queue ==="
                 if [ -s "$QUEUE_FILE" ]; then
-                    echo "Issue|Priority|Added"
-                    echo "------|---------|-----"
-                    while IFS='|' read -r issue priority timestamp; do
+                    echo "Task|Priority|Added"
+                    echo "-----|---------|-----"
+                    while IFS='|' read -r task priority timestamp; do
                         date_str=$(date -d "@$timestamp" "+%Y-%m-%d %H:%M" 2>/dev/null || date -r "$timestamp" "+%Y-%m-%d %H:%M" 2>/dev/null)
-                        echo "$issue|$priority|$date_str"
+                        echo "$task|$priority|$date_str"
                     done < "$QUEUE_FILE"
                 else
                     echo "Queue is empty"
@@ -189,17 +186,19 @@ case "$1" in
         echo "Usage: task <command> [args]"
         echo ""
         echo "Commands:"
-        echo "  add ISSUE [PRIORITY]      - Add task to queue"
+        echo "  add TASK [PRIORITY]       - Add task to queue (e.g., #47-1)"
         echo "  next                      - Get next unblocked task"
-        echo "  approve ISSUE [REASON]    - Mark task approved"
-        echo "  reject ISSUE [REASON]     - Mark task rejected"
+        echo "  approve TASK [REASON]     - Mark task approved"
+        echo "  reject TASK [REASON]      - Mark task rejected"
         echo "  block BLOCKER BLOCKED     - Add blocking relationship"
         echo "  unblock BLOCKER BLOCKED   - Remove blocking relationship"
-        echo "  status [ISSUE]            - Check task status"
+        echo "  status [TASK]             - Check task status"
         echo "  list [--filter]           - List tasks"
         echo "    --blocked               - Show blocked tasks"
         echo "    --approved              - Show recent approvals"
         echo "    --manual-blocking       - Show manual tasks blocking work"
         echo "  clear <what>              - Clear data"
+        echo ""
+        echo "Task format: #ISSUE-TASK (e.g., #47-1 for issue 47, task 1)"
         ;;
 esac
