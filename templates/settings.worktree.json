@@ -1,0 +1,98 @@
+{
+  "permissions": {
+    "allow": [
+      "// Worktree-specific permissive settings for autonomous operation",
+      
+      "// Git operations - safe in isolated worktrees",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      
+      "// Development tools - all allowed in worktrees",
+      "Bash(npm:*)",
+      "Bash(yarn:*)",
+      "Bash(pnpm:*)",
+      "Bash(pip:*)",
+      "Bash(poetry:*)",
+      "Bash(cargo:*)",
+      "Bash(go:*)",
+      "Bash(make:*)",
+      
+      "// Testing and quality tools",
+      "Bash(jest:*)",
+      "Bash(pytest:*)",
+      "Bash(rspec:*)",
+      "Bash(go test:*)",
+      "Bash(cargo test:*)",
+      "Bash(eslint:*)",
+      "Bash(prettier:*)",
+      "Bash(black:*)",
+      "Bash(ruff:*)",
+      "Bash(rubocop:*)",
+      
+      "// File operations - unrestricted in worktrees",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "MultiEdit(*)",
+      
+      "// Build tools",
+      "Bash(webpack:*)",
+      "Bash(vite:*)",
+      "Bash(tsc:*)",
+      "Bash(babel:*)",
+      "Bash(rollup:*)",
+      
+      "// Docker operations",
+      "Bash(docker build:*)",
+      "Bash(docker run:*)",
+      "Bash(docker-compose:*)",
+      
+      "// Local servers and databases",
+      "Bash(psql:*)",
+      "Bash(mysql:*)",
+      "Bash(redis-cli:*)",
+      "Bash(mongosh:*)",
+      
+      "// Claude tools",
+      "Bash(.claude/tools/*:*)",
+      "Bash(./claude-tools:*)",
+      
+      "// Local network operations",
+      "WebFetch(domain:localhost)",
+      "WebFetch(domain:127.0.0.1)",
+      "WebFetch(domain:0.0.0.0)",
+      
+      "// Common utilities",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(jq:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(tmux:*)"
+    ],
+    "deny": [
+      "// Still protect against dangerous operations",
+      "Bash(rm -rf /)",
+      "Bash(rm -rf ~)",
+      "Bash(sudo rm:*)",
+      "Bash(sudo:*)",
+      "Bash(su:*)",
+      "Bash(*:/etc/*)",
+      "Bash(*:/System/*)",
+      "Bash(*:/Windows/*)",
+      
+      "// Protect production resources",
+      "Bash(aws * --profile production:*)",
+      "Bash(gcloud * --project prod-*:*)",
+      "Bash(kubectl * --context production:*)",
+      
+      "// Prevent accidental deletions",
+      "Bash(aws s3 rm * --recursive)",
+      "Bash(gsutil rm -r:*)",
+      "Bash(az storage blob delete-batch:*)"
+    ]
+  },
+  "___comment": "These settings enable autonomous operation within isolated worktrees. Since each worktree is separate from the main branch, operations here are safe and can be performed without approval. All changes still require PR review before merging to main."
+}

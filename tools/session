@@ -70,7 +70,29 @@ case "$1" in
         issue="$3"
         session_name="$SESSION_PREFIX-$session_id"
         worktree_path="$WORKTREE_BASE/$issue"
-        branch="claude/$issue"
+        
+        # Intelligently choose branch name based on issue
+        if command -v gh >/dev/null 2>&1; then
+            # Get issue title and labels
+            issue_data=$(gh issue view "$issue" --json title,labels 2>/dev/null || echo '{}')
+            title=$(echo "$issue_data" | jq -r '.title // ""' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g' | cut -c1-50)
+            labels=$(echo "$issue_data" | jq -r '.labels[].name' 2>/dev/null | tr '\n' ' ')
+            
+            # Choose branch prefix based on labels/title
+            if [[ "$labels" == *"bug"* ]] || [[ "$title" == *"fix"* ]]; then
+                branch="bugfix/$issue-$title"
+            elif [[ "$labels" == *"feature"* ]] || [[ "$title" == *"add"* ]] || [[ "$title" == *"implement"* ]]; then
+                branch="feature/$issue-$title"
+            elif [[ "$labels" == *"docs"* ]] || [[ "$title" == *"document"* ]]; then
+                branch="docs/$issue-$title"
+            elif [[ "$title" == *"refactor"* ]] || [[ "$title" == *"cleanup"* ]]; then
+                branch="refactor/$issue-$title"
+            else
+                branch="feature/$issue-$title"  # Default to feature
+            fi
+        else
+            branch="feature/$issue"  # Fallback if gh not available
+        fi
         
         # Create worktree if needed
         if [ ! -d "$worktree_path" ]; then
@@ -78,6 +100,16 @@ case "$1" in
             git worktree add "$worktree_path" -b "$branch" 2>/dev/null || \
             git worktree add "$worktree_path" "$branch" 2>/dev/null || \
             git worktree add "$worktree_path"
+            
+            # Apply autonomous settings if available
+            if [ -x "./tools/setup-autonomous" ]; then
+                ./tools/setup-autonomous apply "$worktree_path"
+            elif [ -f ".claude/templates/settings.worktree.json" ]; then
+                mkdir -p "$worktree_path/.claude"
+                cp ".claude/templates/settings.worktree.json" "$worktree_path/.claude/settings.local.json"
+                echo ".claude/settings.local.json" >> "$worktree_path/.gitignore"
+                echo "✓ Applied autonomous settings to worktree"
+            fi
         fi
         
         # Update tracking

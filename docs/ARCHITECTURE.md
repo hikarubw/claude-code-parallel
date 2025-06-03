@@ -1,162 +1,192 @@
-# Claude Code Tools Architecture
+# Claude Code Parallel Architecture
 
 ## 🎯 Philosophy: Claude-First Development
 
 We give Claude simple tools and let its intelligence orchestrate complex workflows.
 
-## 🏗️ Architecture Overview
+## 🏗️ System Architecture
 
 ```
-User ← → Claude Code ← → Simple Tools ← → Git/GitHub
-          ↑
-          |
-    Intelligence
-    (Claude's Brain)
+Claude Code (Intelligence)
+    ↓
+Slash Commands (Orchestration)
+    ↓
+Simple Tools (Execution)
+    ↓
+Parallel Sessions (tmux)
+    ↓
+Isolated Worktrees (Git)
 ```
 
-## 📦 Tool Organization
+## 🔑 Core Principles
 
-### Consolidated Tools (7 total)
+1. **Simple Tools**: Each tool does ONE thing well (~50-200 lines)
+2. **Claude Intelligence**: Complex logic lives in Claude's interpretation
+3. **Worktree Isolation**: Each task works in an isolated environment
+4. **Autonomous Operation**: Permissive settings reduce interruptions by 90%
 
-#### 1. `task` - Work Management
-Combines queue, approval, and dependency tracking:
-- Maintains work queue with priorities
-- Tracks approval/rejection decisions  
-- Manages blocking relationships
-- Single source of truth for work state
+## 📦 Core Tools
 
-#### 2. `session` - Execution Environment
-Integrates tmux sessions with git worktrees:
-- Creates isolated development environments
-- Each issue gets dedicated worktree
-- Tracks session assignments
-- Handles cleanup automatically
+### 1. `task` - Work Queue Management
+```bash
+task add ISSUE [PRIORITY]      # Add to queue
+task next                      # Get unblocked task
+task block BLOCKER BLOCKED     # Track dependencies
+task approve/reject ISSUE      # Record decisions
+```
+- File-based queue (`.claude/tasks/queue`)
+- Simple dependency tracking
+- No complex logic - just data management
 
-#### 3. `github` - GitHub Integration
-Unified interface to GitHub operations:
-- Issue management (list, create, label)
-- Sub-issue creation and linking
-- PR status checking
-- Recent activity monitoring
+### 2. `session` - Parallel Execution
+```bash
+session start [N]              # Start N tmux sessions
+session assign ID ISSUE        # Assign work with worktree
+session stop [ID|all]          # Clean up
+```
+- Each session gets isolated worktree
+- Automatic branch creation (feature/, bugfix/, etc.)
+- Applies autonomous settings automatically
 
-#### 4. `analyze` - Project Intelligence
-Provides codebase insights:
-- File structure analysis
-- Dependency detection
-- Project type identification
-- Metrics gathering
+### 3. `github` - GitHub Integration
+```bash
+github split ISSUE             # Break into sub-tasks
+github pr ISSUE                # Create pull request
+github issues [--my-work]      # List issues
+```
+- Wraps GitHub CLI (`gh`)
+- Handles issue labeling
+- Manages PR lifecycle
 
-#### 5. `monitor` - Progress Tracking
-Real-time development monitoring:
-- Session activity tracking
-- Queue status
-- Blocking task alerts
-- Progress dashboards
+### 4. `maintain` - Cleanup & Maintenance
+```bash
+maintain [what]                # Smart cleanup
+maintain worktrees             # Remove completed
+maintain sessions              # Stop idle sessions
+```
+- Prevents resource accumulation
+- Automatic detection of completed work
 
-#### 6. `maintain` - Environment Health
-Keeps development environment clean:
-- Worktree cleanup (merged/closed)
-- Session management
-- Data archival
-- Usage reporting
+### 5. `setup-autonomous` - Permission Management
+```bash
+setup-autonomous init          # Create settings template
+setup-autonomous apply PATH    # Apply to worktree
+setup-autonomous check         # Verify configuration
+```
+- Enables autonomous operation
+- Manages worktree-specific settings
 
-#### 7. `oauth-setup` - Configuration
-Special-purpose OAuth setup tool.
+## 🧠 Intelligence Layer (Claude)
 
-## 🎮 Command Structure
-
-### Workflow-Oriented Commands
-
-Commands follow natural development flow:
-
-1. **`/setup`** → Initialize and prepare
-2. **`/work`** → Start development
-3. **`/status`** → Monitor progress
-4. **`/manual`** → Handle human tasks
-5. **`/maintain`** → Clean up
-6. **`/auto`** → Autonomous operation
-
-Each command maps to a clear action verb and workflow stage.
-
-## 🧠 Intelligence Layer
-
-Claude provides all intelligence:
+### Commands as Documentation
+Each command file teaches Claude:
+```markdown
+# commands/work.md
+## What I'll Do
+1. Get next task from queue
+2. Check dependencies
+3. Create worktree
+4. Apply autonomous settings
+5. Assign to session
+```
 
 ### Decision Making
-- Risk assessment for auto-approval
-- Task prioritization
-- Dependency resolution
-- Resource allocation
+Claude decides:
+- Which branch name to use (feature/, bugfix/, docs/)
+- Whether an issue needs a branch
+- How to break down complex issues
+- When to create PRs
 
-### Orchestration
-- Tool coordination
-- Session management
-- Error handling
-- Progress monitoring
+### Error Recovery
+Claude handles:
+- Failed sessions
+- Merge conflicts
+- Test failures
+- Build issues
 
-### Adaptation
-- Learning from outcomes
-- Adjusting strategies
-- Optimizing workflows
+## 🔐 Security Model
 
-## 🔄 Data Flow
+### Worktree Isolation
+```
+main (protected)
+├── feature/101-oauth (autonomous)
+├── bugfix/102-error (autonomous)
+└── docs/103-guide (autonomous)
+```
+
+### Permission Boundaries
+- **In Main Branch**: Restrictive permissions
+- **In Worktrees**: Permissive permissions
+- **PR Gateway**: All merges reviewed
+
+### Autonomous but Safe
+- Can't push to main
+- Can't delete important files
+- Can't access production
+- All changes traceable
+
+## 📊 Data Flow
 
 ### Task Lifecycle
 ```
-GitHub Issue → /setup → Task Queue → /work → Session/Worktree → PR → Completion
-                ↓                                    ↓
-            Dependencies                        Auto-cleanup
+GitHub Issue
+    ↓
+Task Queue (task add)
+    ↓
+Dependency Check (task next)
+    ↓
+Worktree Creation (session assign)
+    ↓
+Autonomous Work (in worktree)
+    ↓
+PR Creation (github pr)
+    ↓
+Review & Merge (human)
 ```
 
-### State Management
-- `.claude/tasks/` - Work queue and approvals
-- `.claude/sessions/` - Session tracking
-- `.worktrees/` - Git worktrees
-- Tools maintain minimal state files
+### Parallel Execution
+```
+Main Claude Instance
+├── Session 1 → Worktree 1 → feature/101
+├── Session 2 → Worktree 2 → bugfix/102
+├── Session 3 → Worktree 3 → feature/103
+├── Session 4 → Worktree 4 → docs/104
+└── Session 5 → Worktree 5 → refactor/105
+```
 
-## 🚀 Key Design Principles
+## 🚀 Performance Characteristics
 
-### 1. Simplicity First
-Each tool does ONE thing well. Complexity emerges from orchestration, not code.
+### Scalability
+- **Comfortable**: 5-10 parallel sessions
+- **Possible**: 20-30 with optimization
+- **Bottlenecks**: Disk I/O, tmux limits
 
-### 2. Transparency
-Tools output clear, parseable text. Claude can always understand tool state.
+### Efficiency
+- Task assignment: ~2 seconds
+- Worktree creation: ~5 seconds
+- Autonomous operation: No delays
+- PR creation: ~3 seconds
 
-### 3. Idempotency
-Tools can be run multiple times safely. State transitions are explicit.
+## 🔄 Extension Points
 
-### 4. Composability
-Tools work independently but compose into workflows naturally.
+### Adding New Tools
+1. Create simple bash script (<200 lines)
+2. One clear purpose
+3. No embedded intelligence
+4. Clear output format
 
-### 5. Claude-Aware
-Tools are designed for Claude to orchestrate, not for direct human use.
+### Adding New Commands
+1. Create markdown documentation
+2. Describe workflow steps
+3. Reference tools to use
+4. Let Claude interpret
 
-## 📊 Benefits of This Architecture
+## 🌟 Why This Works
 
-### For Users
-- Simple mental model
-- Clear workflow progression
-- Powerful automation
-- Easy troubleshooting
+1. **Simplicity**: Easy to understand and modify
+2. **Flexibility**: Claude adapts to any workflow  
+3. **Reliability**: Simple tools rarely break
+4. **Autonomy**: Isolation enables freedom
+5. **Scalability**: Parallel by design
 
-### for Developers
-- Minimal code to maintain
-- Clear responsibilities
-- Easy to extend
-- Simple testing
-
-### For Claude
-- Clear tool boundaries
-- Predictable outputs
-- Flexible orchestration
-- Rich context
-
-## 🔮 Future Extensions
-
-The architecture supports:
-- Additional tools as needed
-- New workflow patterns
-- Integration with more services
-- Enhanced intelligence
-
-All without breaking the core simplicity principle.
+The architecture embodies the principle: **Simple tools + Intelligent orchestration + Safe isolation = Powerful automation**

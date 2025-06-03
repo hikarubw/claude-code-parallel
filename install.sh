@@ -13,7 +13,7 @@ readonly VERSION="1.0.1"
 readonly BASE_URL="https://raw.githubusercontent.com/$REPO/main"
 
 # Tools and commands to install
-readonly TOOLS=(task session github maintain)
+readonly TOOLS=(task session github maintain setup-autonomous)
 readonly COMMANDS=(setup work status manual maintain auto)
 
 # Colors

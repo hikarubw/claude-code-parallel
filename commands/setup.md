@@ -30,7 +30,6 @@ Arguments: $ARGUMENTS
 - Add appropriate labels:
   - `claude-work` for automated tasks
   - `manual-work` for human tasks (prefix with 👤)
-  - Size labels: `size-xs` (<1hr), `size-s` (1-2hr), `size-m` (2-4hr)
 - Track dependencies with `task block`
 
 ### 5. Prepare Work Queue

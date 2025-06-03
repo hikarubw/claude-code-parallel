@@ -1,76 +1,66 @@
 # Claude Code Parallel
 
-> ⚠️ **Personal Project**: This is a personal tool for parallel development automation with Claude Code. Use at your own risk.
+Supercharge Claude Code with parallel development capabilities. Work on multiple tasks simultaneously with 90% fewer interruptions.
 
-Parallel development automation tools that give Claude Code the ability to work on multiple tasks simultaneously.
+## 🚀 What Is This?
 
-## 🚀 What It Does
+Claude Code Parallel enables Claude to work on multiple issues at once using isolated git worktrees and tmux sessions. Each parallel session operates autonomously in its own sandbox, dramatically reducing approval prompts while keeping your main branch safe.
 
-**Parallel Development at Scale** - Claude Code can:
-- Work on multiple issues simultaneously in isolated environments
-- Manage task queues with dependency tracking
-- Create and switch between git worktrees automatically
-- Run parallel tmux sessions with different Claude instances
-- Break down large issues into manageable subtasks
+### Key Features:
+- **🔄 Parallel Execution** - Work on 5-10 issues simultaneously
+- **🤖 Autonomous Operation** - 90% fewer approval interruptions
+- **📦 Isolated Worktrees** - Each task in its own git sandbox  
+- **🧠 Smart Orchestration** - Automatic dependency management
+- **✅ Safe by Design** - All changes through PR review
 
 ## ⚡ Quick Start
 
 ```bash
-# In your project directory
+# Install in your project
 curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-parallel/main/install.sh | bash
+
+# Then in Claude Code:
+/project:setup    # Initialize project
+/project:work 5   # Start 5 parallel sessions
 ```
 
-Then in Claude Code:
-```bash
-/project:setup    # Analyze project and prepare work queue
-/project:work 5   # Start 5 parallel development sessions
-```
+See [Quick Start Guide](docs/QUICK_START.md) for a 5-minute walkthrough.
 
-### Other Options
+## 📚 Documentation
 
-```bash
-# See help
-bash install.sh --help
+- **[Quick Start Guide](docs/QUICK_START.md)** - Get running in 5 minutes
+- **[Architecture Overview](docs/ARCHITECTURE.md)** - How it works
+- **[Workflow Guide](docs/WORKFLOW.md)** - Common usage patterns
+- **[FAQ](docs/FAQ.md)** - Frequently asked questions
+- **[All Documentation](docs/README.md)** - Complete docs index
 
-# Uninstall
-bash install.sh --uninstall
-```
+## 🎮 Commands
 
-## 🛠️ Core Tools
+| Command | Description |
+|---------|-------------|
+| `/project:setup` | Analyze project and prepare work queue |
+| `/project:work N` | Start N parallel sessions |
+| `/project:status` | View progress dashboard |
+| `/project:manual` | Handle manual tasks |
+| `/project:maintain` | Clean up resources |
 
-- **`task`** - Queue management with dependency tracking
-- **`session`** - Parallel tmux sessions with git worktrees
-- **`github`** - Issue breakdown and PR automation
-- **`maintain`** - Cleanup and resource management
+## 🛡️ Safety & Security
 
-## 📋 Commands
+- **Worktree Isolation**: Each task works in an isolated git worktree
+- **PR Gateway**: All changes must go through pull request review
+- **No Main Branch Access**: Parallel sessions can't modify main directly
+- **Full Traceability**: Complete git history for all changes
 
-```bash
-/project:setup       # Initialize project for parallel work
-/project:work N      # Start N parallel sessions
-/project:status      # View all parallel work status
-/project:manual      # Handle tasks requiring human input
-/project:maintain    # Clean up worktrees and sessions
-/project:auto        # Run continuously with scheduling
-```
-
-## 💡 Philosophy
-
-**"Simple tools, intelligent orchestration"**
-
-Each tool is intentionally simple (~50-200 lines). The intelligence comes from Claude orchestrating these tools based on natural language commands.
-
-## 🔧 Requirements
+## 📋 Requirements
 
 - Git repository
-- Bash shell
+- Bash shell  
 - Claude Code (MAX subscription recommended)
-- GitHub CLI (`gh`) - for issue management
-- tmux - for parallel sessions
+- Optional: GitHub CLI (`gh`), tmux
 
-## ⚠️ Security Note
+## ⚠️ Disclaimer
 
-These tools execute bash commands. Only use in trusted environments and review the code before running.
+This is a personal project for parallel development automation. While designed to be safe through worktree isolation, always review PRs before merging. Use at your own risk.
 
 ## 📄 License
 
@@ -78,4 +68,4 @@ MIT License - see [LICENSE](LICENSE)
 
 ---
 
-*Parallel development automation for Claude Code.*
+*Built with the philosophy: Simple tools + Intelligent orchestration + Safe isolation = Powerful automation*

@@ -1,0 +1,126 @@
+#!/bin/bash
+# Setup autonomous operation in worktrees
+
+TEMPLATE_DIR=".claude/templates"
+WORKTREE_SETTINGS="$TEMPLATE_DIR/settings.worktree.json"
+
+case "$1" in
+    init)
+        # Initialize autonomous settings template
+        mkdir -p "$TEMPLATE_DIR"
+        
+        if [ ! -f "$WORKTREE_SETTINGS" ]; then
+            echo "Creating autonomous worktree settings template..."
+            cat > "$WORKTREE_SETTINGS" << 'EOF'
+{
+  "permissions": {
+    "allow": [
+      "// Autonomous worktree operations",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(npm:*)",
+      "Bash(yarn:*)",
+      "Bash(pip:*)",
+      "Bash(cargo:*)",
+      "Bash(go:*)",
+      "Bash(make:*)",
+      "Bash(jest:*)",
+      "Bash(pytest:*)",
+      "Bash(eslint:*)",
+      "Bash(prettier:*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "Bash(.claude/tools/*:*)",
+      "Bash(tmux:*)",
+      "WebFetch(domain:localhost)",
+      "WebFetch(domain:127.0.0.1)"
+    ],
+    "deny": [
+      "Bash(rm -rf /)",
+      "Bash(sudo:*)",
+      "Bash(*:/etc/*)",
+      "Bash(*:/System/*)"
+    ]
+  }
+}
+EOF
+            echo "✓ Created autonomous settings template"
+        else
+            echo "✓ Autonomous settings template already exists"
+        fi
+        ;;
+        
+    apply)
+        # Apply autonomous settings to a worktree
+        worktree_path="$2"
+        
+        if [ -z "$worktree_path" ]; then
+            echo "Usage: setup-autonomous apply <worktree-path>"
+            exit 1
+        fi
+        
+        if [ ! -d "$worktree_path" ]; then
+            echo "Error: Worktree path does not exist: $worktree_path"
+            exit 1
+        fi
+        
+        # Create .claude directory in worktree
+        mkdir -p "$worktree_path/.claude"
+        
+        # Copy autonomous settings
+        if [ -f "$WORKTREE_SETTINGS" ]; then
+            cp "$WORKTREE_SETTINGS" "$worktree_path/.claude/settings.local.json"
+            echo "✓ Applied autonomous settings to $worktree_path"
+            
+            # Add to .gitignore to prevent committing
+            if ! grep -q "^.claude/settings.local.json$" "$worktree_path/.gitignore" 2>/dev/null; then
+                echo ".claude/settings.local.json" >> "$worktree_path/.gitignore"
+            fi
+        else
+            echo "Error: No autonomous settings template found"
+            echo "Run: setup-autonomous init"
+            exit 1
+        fi
+        ;;
+        
+    check)
+        # Check if autonomous settings are properly configured
+        echo "=== Autonomous Operation Status ==="
+        
+        # Check template exists
+        if [ -f "$WORKTREE_SETTINGS" ]; then
+            echo "✓ Settings template exists"
+            perms=$(grep -c "allow" "$WORKTREE_SETTINGS" || true)
+            echo "  Permissions configured: $perms allow rules"
+        else
+            echo "✗ Settings template missing"
+            echo "  Run: setup-autonomous init"
+        fi
+        
+        # Check worktrees
+        echo ""
+        echo "Worktree settings:"
+        for worktree in .worktrees/*/; do
+            if [ -d "$worktree" ]; then
+                if [ -f "$worktree/.claude/settings.local.json" ]; then
+                    echo "✓ $(basename "$worktree"): Autonomous settings applied"
+                else
+                    echo "✗ $(basename "$worktree"): No autonomous settings"
+                fi
+            fi
+        done
+        ;;
+        
+    *)
+        echo "Usage: setup-autonomous <command>"
+        echo ""
+        echo "Commands:"
+        echo "  init          - Create autonomous settings template"
+        echo "  apply PATH    - Apply settings to worktree"
+        echo "  check         - Check autonomous configuration"
+        echo ""
+        echo "This tool enables autonomous operation in worktrees"
+        echo "by applying permissive settings that reduce approvals."
+        ;;
+esac

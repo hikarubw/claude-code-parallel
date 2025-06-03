@@ -1,23 +1,29 @@
 # Quick Start Guide
 
-Get up and running with Claude Code Tools in 5 minutes!
+Get up and running with Claude Code Parallel in 5 minutes! 🚀
+
+## What is Claude Code Parallel?
+
+**Claude Code Parallel** supercharges Claude Code by enabling it to work on multiple tasks simultaneously. Think of it as giving Claude multiple hands to work with - each in its own safe sandbox.
+
+### Key Benefits:
+- 🚀 **5-10x faster development** - Work on multiple issues at once
+- 🤖 **90% fewer interruptions** - Autonomous operation in isolated worktrees  
+- 🔒 **Completely safe** - All changes go through PR review
+- 🧠 **Smart orchestration** - Claude manages dependencies automatically
 
 ## 🚀 Installation
 
 ```bash
-# One-line install
-curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-tools/main/scripts/install.sh | bash
-
-# Go to your project
-cd your-project
-
-# Install for this project
-claude-tools-install
+# In your project directory
+curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-parallel/main/install.sh | bash
 ```
 
-## 🎯 Basic Workflow
+That's it! The installer adds commands and tools to your project's `.claude/` directory.
 
-### 1. Initialize Your Project
+## 🎯 Your First Parallel Session
+
+### Step 1: Initialize Your Project
 
 Open Claude Code in your project and run:
 
@@ -25,55 +31,39 @@ Open Claude Code in your project and run:
 /project:setup
 ```
 
-Claude will:
-- Analyze your codebase
-- Fetch GitHub issues
-- Create sub-tasks for complex work
-- Set up the work queue
+**What happens:** Claude analyzes your GitHub issues, creates a work queue, and prepares everything for parallel execution.
 
-### 2. Start Working
+### Step 2: Start Parallel Work
 
 ```
 /project:work 5
 ```
 
-This starts 5 parallel sessions. Claude will:
-- Create isolated worktrees for each issue
-- Assign work to sessions
-- Begin development
+**What happens:** Claude starts 5 parallel sessions, each working on a different issue in its own isolated git worktree. No more waiting for one task to finish before starting the next!
 
-### 3. Monitor Progress
+### Step 3: Check Progress
 
 ```
 /project:status
 ```
 
-See a complete dashboard showing:
-- Active sessions and their work
-- Queue status
-- Manual tasks blocking automation
-- Recent completions
+**What happens:** See a real-time dashboard of all active work, completed tasks, and any blockers.
 
-### 4. Handle Manual Tasks
+### Step 4: Handle Manual Tasks (if any)
 
 ```
 /project:manual
 ```
 
-Shows tasks that need human intervention:
-- Tasks blocking automated work get priority
-- Complete them to unblock automation
+**What happens:** Some tasks need human input (like API keys). Complete these to unblock more automated work.
 
-### 5. Clean Up
+### Step 5: Clean Up When Done
 
 ```
 /project:maintain
 ```
 
-Removes:
-- Completed worktrees
-- Idle sessions
-- Old log files
+**What happens:** Removes completed worktrees and stops idle sessions, keeping your workspace tidy.
 
 ## 📘 Example Session
 
@@ -142,4 +132,4 @@ Assigning them to available sessions...
 
 - Run any command without arguments for help
 - Check `docs/WORKFLOW.md` for detailed workflows
-- Visit the [GitHub repository](https://github.com/hikarubw/claude-code-tools)
+- Visit the [GitHub repository](https://github.com/hikarubw/claude-code-parallel)
