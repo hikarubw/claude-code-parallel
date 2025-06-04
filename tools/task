@@ -1,6 +1,7 @@
 #!/bin/bash
 # Unified task management - queue, approval, and blocking
 # Supports task format: #47-1 (issue 47, task 1)
+# Enhanced dependency parsing: blocked-by:#47-1,#47-2 or depends-on:#47-1
 
 TASK_DIR=".claude/tasks"
 QUEUE_FILE="$TASK_DIR/queue"
@@ -9,13 +10,48 @@ REJECTED_FILE="$TASK_DIR/rejected.log"
 BLOCKING_FILE="$TASK_DIR/blocking"
 mkdir -p "$TASK_DIR"
 
+# Parse dependency strings like "blocked-by:#47-1,#47-2" or "depends-on:#47-1"
+parse_dependencies() {
+    local dep_string="$1"
+    local task_id="$2"
+    
+    # Handle both blocked-by: and depends-on: formats
+    if [[ "$dep_string" =~ ^(blocked-by|depends-on):(.+)$ ]]; then
+        local dep_type="${BASH_REMATCH[1]}"
+        local deps="${BASH_REMATCH[2]}"
+        
+        # Split by comma and process each dependency
+        IFS=',' read -ra DEP_ARRAY <<< "$deps"
+        for dep in "${DEP_ARRAY[@]}"; do
+            # Clean whitespace and validate format
+            dep=$(echo "$dep" | tr -d ' ')
+            if [[ "$dep" =~ ^#[0-9]+-[0-9]+$ ]]; then
+                echo "$dep|$task_id|$(date +%s)" >> "$BLOCKING_FILE"
+                echo "  → $dep blocks $task_id"
+            else
+                echo "  ⚠️  Invalid dependency format: $dep (expected #issue-task)"
+            fi
+        done
+    fi
+}
+
 case "$1" in
     add)
-        # Add task to queue
+        # Add task to queue with optional dependencies
+        # Usage: task add "#47-1" [priority] [dependency_string]
+        # Example: task add "#47-2" 5 "blocked-by:#47-1"
         task="$2"
         priority="${3:-5}"
+        dependencies="$4"
+        
         echo "$task|$priority|$(date +%s)" >> "$QUEUE_FILE"
         echo "Added $task to queue (priority: $priority)"
+        
+        # Parse and add dependencies if provided
+        if [ -n "$dependencies" ]; then
+            echo "Processing dependencies: $dependencies"
+            parse_dependencies "$dependencies" "$task"
+        fi
         ;;
     
     next)
@@ -65,6 +101,89 @@ case "$1" in
         grep -v "^$blocker|$blocked|" "$BLOCKING_FILE" > "$BLOCKING_FILE.tmp" 2>/dev/null || true
         mv "$BLOCKING_FILE.tmp" "$BLOCKING_FILE" 2>/dev/null || true
         echo "Removed: $blocker no longer blocks $blocked"
+        ;;
+    
+    depends)
+        # Advanced dependency management
+        subcommand="$2"
+        case "$subcommand" in
+            add)
+                # Parse dependency string and add multiple dependencies
+                # Usage: task depends add "#47-2" "blocked-by:#47-1,#46-3"
+                task_id="$3"
+                dep_string="$4"
+                echo "Adding dependencies for $task_id:"
+                parse_dependencies "$dep_string" "$task_id"
+                ;;
+            
+            remove)
+                # Remove specific dependency
+                # Usage: task depends remove "#47-1" "#47-2"
+                blocker="$3"
+                blocked="$4"
+                grep -v "^$blocker|$blocked|" "$BLOCKING_FILE" > "$BLOCKING_FILE.tmp" 2>/dev/null || true
+                mv "$BLOCKING_FILE.tmp" "$BLOCKING_FILE" 2>/dev/null || true
+                echo "Removed dependency: $blocker no longer blocks $blocked"
+                ;;
+            
+            show)
+                # Show all dependencies for a task
+                task_id="$3"
+                echo "Dependencies for $task_id:"
+                echo "Blocked by:"
+                grep "|$task_id|" "$BLOCKING_FILE" 2>/dev/null | while IFS='|' read -r blocker blocked timestamp; do
+                    echo "  ← $blocker"
+                done || echo "  (none)"
+                
+                echo "Blocking:"
+                grep "^$task_id|" "$BLOCKING_FILE" 2>/dev/null | while IFS='|' read -r blocker blocked timestamp; do
+                    echo "  → $blocked"
+                done || echo "  (none)"
+                ;;
+            
+            chain)
+                # Show full dependency chain
+                task_id="$3"
+                echo "=== Dependency Chain for $task_id ==="
+                
+                # Find all upstream dependencies (what blocks this task)
+                echo "Upstream (must complete first):"
+                find_upstream_deps() {
+                    local task="$1"
+                    local level="${2:-0}"
+                    local indent=$(printf "%*s" $((level * 2)) "")
+                    
+                    grep "|$task|" "$BLOCKING_FILE" 2>/dev/null | while IFS='|' read -r blocker blocked timestamp; do
+                        echo "$indent← $blocker"
+                        find_upstream_deps "$blocker" $((level + 1))
+                    done
+                }
+                find_upstream_deps "$task_id"
+                
+                echo ""
+                echo "Downstream (waiting on this task):"
+                find_downstream_deps() {
+                    local task="$1"
+                    local level="${2:-0}"
+                    local indent=$(printf "%*s" $((level * 2)) "")
+                    
+                    grep "^$task|" "$BLOCKING_FILE" 2>/dev/null | while IFS='|' read -r blocker blocked timestamp; do
+                        echo "$indent→ $blocked"
+                        find_downstream_deps "$blocked" $((level + 1))
+                    done
+                }
+                find_downstream_deps "$task_id"
+                ;;
+            
+            *)
+                echo "Usage: task depends <command> [args]"
+                echo "Commands:"
+                echo "  add TASK 'blocked-by:#1-1,#1-2'  - Add multiple dependencies"
+                echo "  remove BLOCKER BLOCKED            - Remove specific dependency"
+                echo "  show TASK                         - Show all dependencies for task"
+                echo "  chain TASK                        - Show full dependency chain"
+                ;;
+        esac
         ;;
     
     status)
@@ -186,19 +305,28 @@ case "$1" in
         echo "Usage: task <command> [args]"
         echo ""
         echo "Commands:"
-        echo "  add TASK [PRIORITY]       - Add task to queue (e.g., #47-1)"
-        echo "  next                      - Get next unblocked task"
-        echo "  approve TASK [REASON]     - Mark task approved"
-        echo "  reject TASK [REASON]      - Mark task rejected"
-        echo "  block BLOCKER BLOCKED     - Add blocking relationship"
-        echo "  unblock BLOCKER BLOCKED   - Remove blocking relationship"
-        echo "  status [TASK]             - Check task status"
-        echo "  list [--filter]           - List tasks"
-        echo "    --blocked               - Show blocked tasks"
-        echo "    --approved              - Show recent approvals"
-        echo "    --manual-blocking       - Show manual tasks blocking work"
-        echo "  clear <what>              - Clear data"
+        echo "  add TASK [PRIORITY] [DEPS] - Add task to queue with optional dependencies"
+        echo "                               Example: task add '#47-2' 5 'blocked-by:#47-1,#46-3'"
+        echo "  next                       - Get next unblocked task"
+        echo "  approve TASK [REASON]      - Mark task approved"
+        echo "  reject TASK [REASON]       - Mark task rejected"
+        echo "  block BLOCKER BLOCKED      - Add blocking relationship"
+        echo "  unblock BLOCKER BLOCKED    - Remove blocking relationship"
+        echo "  depends <sub-command>      - Advanced dependency management"
+        echo "  status [TASK]              - Check task status"
+        echo "  list [--filter]            - List tasks"
+        echo "    --blocked                - Show blocked tasks"
+        echo "    --approved               - Show recent approvals"
+        echo "    --manual-blocking        - Show manual tasks blocking work"
+        echo "  clear <what>               - Clear data"
+        echo ""
+        echo "Dependency Commands:"
+        echo "  depends add TASK 'blocked-by:#1-1,#1-2'  - Add multiple dependencies"
+        echo "  depends remove BLOCKER BLOCKED           - Remove specific dependency"
+        echo "  depends show TASK                        - Show all dependencies for task"
+        echo "  depends chain TASK                       - Show full dependency chain"
         echo ""
         echo "Task format: #ISSUE-TASK (e.g., #47-1 for issue 47, task 1)"
+        echo "Dependency formats: 'blocked-by:#47-1' or 'depends-on:#47-1' (comma-separated)"
         ;;
 esac
