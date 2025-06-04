@@ -114,14 +114,27 @@ case "$1" in
         
         # Update tracking
         grep -v "^$session_name|" "$SESSION_DIR/tracking" > "$SESSION_DIR/tracking.tmp" 2>/dev/null || true
-        echo "$session_name|$(date +%s)|working|$issue" >> "$SESSION_DIR/tracking.tmp"
+        if [ "$is_task" = true ]; then
+            echo "$session_name|$(date +%s)|working|#$issue_num-$task_num" >> "$SESSION_DIR/tracking.tmp"
+        else
+            echo "$session_name|$(date +%s)|working|$issue" >> "$SESSION_DIR/tracking.tmp"
+        fi
         mv "$SESSION_DIR/tracking.tmp" "$SESSION_DIR/tracking"
         
         # Send Claude to worktree
         tmux send -t "$session_name" "cd $(pwd)/$worktree_path" Enter
-        tmux send -t "$session_name" "claude /work-on $issue" Enter
+        if [ "$is_task" = true ]; then
+            tmux send -t "$session_name" "claude /work-on #$issue_num-$task_num" Enter
+        else
+            tmux send -t "$session_name" "claude /work-on $issue" Enter
+        fi
         
-        echo "Assigned $issue to $session_name"
+        if [ "$is_task" = true ]; then
+            echo "Assigned task #$issue_num-$task_num to $session_name"
+        else
+            echo "Assigned issue #$issue to $session_name"
+        fi
+        echo "Branch: $branch"
         echo "Worktree: $worktree_path"
         ;;
     
@@ -149,7 +162,12 @@ case "$1" in
                 if tmux has-session -t "$session" 2>/dev/null; then
                     worktree=""
                     if [ -n "$issue" ]; then
-                        worktree="$WORKTREE_BASE/$issue"
+                        # Check if it's a task format
+                        if [[ "$issue" =~ ^#?([0-9]+)-([0-9]+)$ ]]; then
+                            worktree="$WORKTREE_BASE/task-${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+                        else
+                            worktree="$WORKTREE_BASE/$issue"
+                        fi
                     fi
                     echo "$session|$status|${issue:-none}|$worktree"
                 fi

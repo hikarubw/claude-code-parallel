@@ -28,10 +28,10 @@ That's it! The installer adds commands and tools to your project's `.claude/` di
 Open Claude Code in your project and run:
 
 ```
-/project:setup
+/project:setup-tasks
 ```
 
-**What happens:** Claude analyzes your GitHub issues, creates a work queue, and prepares everything for parallel execution.
+**What happens:** Claude analyzes your GitHub issues, extracts checklist items as individual tasks, identifies dependencies, and prepares everything for parallel execution.
 
 ### Step 2: Start Parallel Work
 
@@ -39,15 +39,15 @@ Open Claude Code in your project and run:
 /project:work 5
 ```
 
-**What happens:** Claude starts 5 parallel sessions, each working on a different issue in its own isolated git worktree. No more waiting for one task to finish before starting the next!
+**What happens:** Claude starts 5 parallel sessions, each working on a different task (not entire issues!) in its own isolated git worktree. Tasks are checklist items from your issues - smaller, focused units of work.
 
 ### Step 3: Check Progress
 
 ```
-/project:status
+/project:task-status
 ```
 
-**What happens:** See a real-time dashboard of all active work, completed tasks, and any blockers.
+**What happens:** See all tasks across issues with progress bars, dependencies, and which sessions are working on what. Each checkbox in your issues is tracked individually.
 
 ### Step 4: Handle Manual Tasks (if any)
 
