@@ -1,135 +1,124 @@
-# Quick Start Guide
+# 🚀 Quick Start Guide
 
-Get up and running with Claude Code Parallel in 5 minutes! 🚀
+Get up and running with Claude Code Tools in 5 minutes.
 
-## What is Claude Code Parallel?
+## Prerequisites
 
-**Claude Code Parallel** supercharges Claude Code by enabling it to work on multiple tasks simultaneously. Think of it as giving Claude multiple hands to work with - each in its own safe sandbox.
+- [Claude Code](https://claude.ai/code) subscription
+- Git repository with GitHub issues
+- macOS or Linux (Windows WSL works too)
 
-### Key Benefits:
-- 🚀 **5-10x faster development** - Work on multiple issues at once
-- 🤖 **90% fewer interruptions** - Autonomous operation in isolated worktrees  
-- 🔒 **Completely safe** - All changes go through PR review
-- 🧠 **Smart orchestration** - Claude manages dependencies automatically
-
-## 🚀 Installation
+## 1. Install
 
 ```bash
-# In your project directory
-curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-parallel/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-tools/main/install.sh | bash
 ```
 
-That's it! The installer adds commands and tools to your project's `.claude/` directory.
+This installs:
+- Claude Code Tools commands in `.claude/commands/`
+- Support tools in `~/bin/claude-tools/`
+- Dependencies (tmux, gh CLI)
 
-## 🎯 Your First Parallel Session
+## 2. Create GitHub Issues
 
-### Step 1: Initialize Your Project
+Create issues describing what you want to build:
 
-Open Claude Code in your project and run:
+```markdown
+Title: Add user authentication
 
-```
-/project:setup-tasks
-```
-
-**What happens:** Claude analyzes your GitHub issues, extracts checklist items as individual tasks, identifies dependencies, and prepares everything for parallel execution.
-
-### Step 2: Start Parallel Work
-
-```
-/project:work 5
-```
-
-**What happens:** Claude starts 5 parallel sessions, each working on a different task (not entire issues!) in its own isolated git worktree. Tasks are checklist items from your issues - smaller, focused units of work.
-
-### Step 3: Check Progress
-
-```
-/project:task-status
+Description:
+- Implement JWT authentication
+- Add login/logout endpoints  
+- Create user profile page
+- Add tests
 ```
 
-**What happens:** See all tasks across issues with progress bars, dependencies, and which sessions are working on what. Each checkbox in your issues is tracked individually.
+## 3. Start Parallel Development
 
-### Step 4: Handle Manual Tasks (if any)
+```bash
+# Navigate to your project
+cd my-project
 
-```
-/project:manual
-```
+# Start 4 workers on issue #123
+/project:work 123 4
 
-**What happens:** Some tasks need human input (like API keys). Complete these to unblock more automated work.
-
-### Step 5: Clean Up When Done
-
-```
-/project:maintain
+# Or work on multiple issues with 8 workers
+/project:work 123,124,125 8
 ```
 
-**What happens:** Removes completed worktrees and stops idle sessions, keeping your workspace tidy.
+## 4. Watch Progress
 
-## 📘 Example Session
+```bash
+# Check current status
+/project:status
 
-```
-User: /project:setup
-
-Claude: Analyzing your project...
-✓ Found 23 open issues
-✓ Created 12 sub-issues for complex tasks
-✓ Set up work queue with 35 tasks
-Ready to start!
-
-User: /project:work 3 --watch
-
-Claude: Starting 3 parallel sessions...
-Session 1: Working on #123 (bug fix)
-Session 2: Working on #456 (feature)
-Session 3: Working on #789 (refactor)
-
-Monitoring enabled - I'll assign new work automatically.
-
-User: /project:status
-
-Claude: 
-=== Development Status ===
-Active: 3/3 sessions
-Queue: 32 tasks remaining
-Completed: 0
-Blocked: 5 (need manual work)
-
-Manual tasks blocking automation:
-🚨 #101: Setup API credentials (blocks 3 tasks)
-
-User: /project:manual start 101
-
-Claude: Starting manual task #101.
-Complete this to unblock 3 automated tasks.
-
-[After completing manual work]
-
-User: /project:manual done 101
-
-Claude: Great! Unblocked 3 tasks.
-Assigning them to available sessions...
+# Watch live updates
+/project:status --watch
 ```
 
-## 🎮 Essential Commands
+You'll see:
+- Workers processing subissues
+- PRs being created
+- Real-time progress metrics
 
-| Command | Purpose |
-|---------|---------|
-| `/project:setup` | Analyze and prepare project |
-| `/project:work [N]` | Start N parallel sessions |
-| `/project:status` | View progress dashboard |
-| `/project:manual` | Manage human tasks |
-| `/project:maintain` | Clean up resources |
-| `/project:auto start` | Run autonomously |
+## 5. Manage Work
 
-## 💡 Pro Tips
+```bash
+# Add more issues
+/project:add 126,127
 
-1. **Start Small**: Begin with 3-5 sessions until you're comfortable
-2. **Watch Mode**: Add `--watch` to `/project:work` for continuous operation
-3. **Regular Cleanup**: Run `/project:maintain` daily
-4. **Handle Blockers**: Check `/project:manual` frequently
+# Stop gracefully
+/project:stop
 
-## 🆘 Need Help?
+# Resume later
+/project:resume
+```
 
-- Run any command without arguments for help
-- Check `docs/WORKFLOW.md` for detailed workflows
-- Visit the [GitHub repository](https://github.com/hikarubw/claude-code-parallel)
+## What Happens?
+
+1. **Claude analyzes** your issues and creates logical subissues
+2. **Workers start** in parallel tmux sessions
+3. **Each worker** picks subissues from the queue
+4. **PRs are created** automatically when work completes
+5. **Parent issues close** when all subissues are done
+
+## Example Session
+
+```bash
+$ /project:work 42 4
+
+🤖 Analyzing issue #42...
+✓ Created #101: [#42] Design database schema
+✓ Created #102: [#42] Implement API endpoints
+✓ Created #103: [#42] Create frontend components
+✓ Created #104: [#42] Add integration tests
+
+🚀 Starting 4 workers...
+✓ worker-1: Processing #101
+✓ worker-2: Processing #102
+✓ worker-3: Processing #103
+✓ worker-4: Processing #104
+
+📊 Progress: 0/4 complete
+
+# ... workers create PRs automatically ...
+
+✅ All done! Created 4 PRs. Issue #42 will close when merged.
+```
+
+## Tips
+
+- **Start small**: Try with 1-2 issues first
+- **Clear descriptions**: Better issues = better subissues
+- **Monitor first run**: Watch to ensure quality
+- **Scale up**: Add more workers as needed
+
+## Next Steps
+
+- Read [Workflow Examples](WORKFLOW.md)
+- Check [Architecture](ARCHITECTURE.md) for details
+- See [FAQ](FAQ.md) for common questions
+
+---
+
+Ready? Pick an issue and run `/project:work` to begin!

@@ -3,20 +3,17 @@
 ## 🚀 Quick Start Workflow
 
 ```bash
-# 1. Setup your project
-/project:setup
+# 1. Start working on issues
+/project:work 123,124 6
 
-# 2. Start working
-/project:work 5
+# 2. Monitor progress
+/project:status --watch
 
-# 3. Check progress
-/project:status
+# 3. Add more work as needed
+/project:add 125,126
 
-# 4. Handle blockers
-/project:manual
-
-# 5. Clean up
-/project:maintain
+# 4. Stop when done
+/project:stop
 ```
 
 ## 📋 Detailed Workflows
@@ -26,177 +23,245 @@
 ```bash
 # First time setup
 cd your-project
-/path/to/claude-code-tools/install.sh
+curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-tools/main/install.sh | bash
 
-# Initialize
-/project:setup
-# Claude analyzes code and issues, creates sub-tasks
+# Create GitHub issues describing what you want
+# Then start working on them
+/project:work 1,2,3 4
 
-# Start development
-/project:work 5 --watch
-# 5 parallel sessions with continuous monitoring
-
-# Check anytime
-/project:status
+# Claude will:
+# - Analyze each issue
+# - Create 2-5 subissues per parent
+# - Start 4 workers processing the queue
+# - Create PRs automatically
 ```
 
 ### Daily Development Flow
 
 ```bash
-# Morning: Check status
+# Morning: Start work on new issues
+/project:work 10,11,12 6
+
+# Check progress anytime
 /project:status
 
-# Resume work
-/project:work --watch
+# Add urgent issue to queue
+/project:add 13 --priority=high
 
-# Handle manual tasks
-/project:manual
-/project:manual start 45
-# Do the manual work
-/project:manual done 45
+# End of day: Stop gracefully
+/project:stop
 
-# End of day cleanup
-/project:maintain
+# Next day: Resume where you left off
+/project:resume
 ```
 
-### Autonomous Operation
+### Continuous Development
 
 ```bash
-# Start autonomous mode with work hours
-/project:auto start --hours=09-18 --sessions=5
+# Start workers on initial issues
+/project:work 20,21,22 8
 
-# Check in periodically
-/project:status
+# Monitor live progress
+/project:status --watch
 
-# Stop when needed
-/project:auto stop
+# Add issues throughout the day
+/project:add 23
+/project:add 24,25
+/project:add 26 --priority=critical
+
+# Workers automatically pick up new work
+# No manual intervention needed
 ```
 
 ## 🎯 Common Scenarios
 
-### Blocked by Manual Work
+### Working on Large Feature
 
 ```bash
-/project:status
-# Shows manual tasks blocking automation
+# Create comprehensive issue
+# Title: Implement user authentication system
+# Body: JWT auth, login/logout, user profiles, tests
 
-/project:manual
-# See priority manual tasks
+# Start with more workers
+/project:work 42 8
 
-/project:manual start 101
-# Complete the manual task
+# Claude creates subissues:
+# - #101: Design auth database schema
+# - #102: Implement JWT generation
+# - #103: Create login/logout endpoints
+# - #104: Build user profile pages
+# - #105: Add comprehensive tests
 
-/project:manual done 101
-# Automated work resumes
+# Monitor the feature progress
+/project:status --issues
 ```
 
-### PR Cleanup
+### Handling Bug Fixes
 
 ```bash
-/project:maintain status
-# Shows merged PRs and closed issues
+# Add critical bugs with high priority
+/project:add 50,51,52 --priority=critical
 
-/project:maintain worktrees
-# Cleans up completed work
+# Workers automatically prioritize critical work
+/project:status --queue
 
-/project:maintain all
-# Full cleanup
+# See which workers are on bugs
+/project:status --workers
 ```
 
-### Focus on Specific Work
+### Scaling Up/Down
 
 ```bash
-# Only work on bugs
-/project:work --focus=bug:*
+# Start with few workers
+/project:work 60 3
 
-# Aggressive auto-approval
-/project:work --aggressive
+# Add more workers if queue grows
+/project:status  # Check queue size
+worker add 5     # Add 5 more workers
 
-# Safe mode (default)
-/project:work --safe
+# Remove workers if queue is small
+worker stop 3    # Stop 3 workers
 ```
 
 ## 💡 Pro Tips
 
-### 1. Use Watch Mode
-Add `--watch` to keep assigning new work:
+### 1. Batch Similar Issues
 ```bash
-/project:work 5 --watch
+# Work on related issues together
+/project:work 70,71,72 6  # All UI issues
 ```
 
-### 2. Regular Maintenance
-Run maintenance daily:
+### 2. Use Priority Wisely
 ```bash
-/project:maintain
+# Set priority for urgent work
+/project:add 80 --priority=critical  # Do first
+/project:add 81 --priority=low       # Do last
 ```
 
-### 3. Unblock Early
-Check manual tasks frequently:
+### 3. Monitor First Runs
 ```bash
-/project:manual
+# Watch initial PRs to ensure quality
+/project:work 90 2          # Start small
+/project:status --watch     # Monitor closely
+# If quality is good, scale up
+worker add 6                # Add more workers
 ```
 
-### 4. Monitor Progress
-Status gives you everything:
+### 4. Resume Capability
 ```bash
-/project:status
+# Stop anytime without losing progress
+/project:stop
+
+# Resume exactly where you left off
+/project:resume
 ```
 
-### 5. Adjust Parallelism
-Start conservative, increase as needed:
+### 5. Check Worker Health
 ```bash
-/project:work 3  # Start small
-/project:work 8  # Scale up
+# Monitor worker efficiency
+worker health
+worker logs 3  # Check specific worker
 ```
 
 ## 🔧 Troubleshooting
 
-### Sessions Not Starting
+### Workers Not Picking Up Tasks
 ```bash
-# Check tmux
-tmux ls
+# Check queue status
+queue status
 
-# Clean and restart
-/project:maintain sessions
-/project:work
+# Check worker status
+worker status
+
+# Restart stuck worker
+worker logs 5        # Identify issue
+tmux kill-session -t worker-5
+worker add 1         # Start replacement
 ```
 
-### Work Not Progressing
+### Queue Issues
 ```bash
-# Check blockers
-/project:status
-/project:manual
+# Check for failed items
+queue status
 
-# Check session state
-session list
+# Retry failed subissues
+queue retry all
+
+# Check specific parent issue
+queue by-parent 100
 ```
 
-### Disk Space Issues
+### Performance Issues
 ```bash
-# Clean aggressively
-/project:maintain all
-maintain prune 3  # Keep only 3 days
+# Check worker health
+worker health
+
+# Reduce workers if system is slow
+worker stop 4
+
+# Clean old completed items
+queue clean 7  # Remove items older than 7 days
 ```
 
 ## 📊 Best Practices
 
-1. **Start with `/setup`** - Always analyze first
-2. **Use appropriate parallelism** - 3-5 sessions is usually optimal
-3. **Handle manual tasks promptly** - They block automation
-4. **Clean up regularly** - Prevents resource accumulation
-5. **Monitor autonomous mode** - Check in every few hours
+1. **Clear Issue Descriptions** - Better issues = better subissues
+2. **Appropriate Worker Count** - 1-2 workers per CPU core
+3. **Regular Monitoring** - Check status periodically
+4. **Use Priorities** - Critical/high for urgent work
+5. **Clean Up Old Data** - Run `queue clean` weekly
 
 ## 🎭 Example Day
 
 ```
-09:00 - /project:setup
-09:15 - /project:work 5 --watch
-10:00 - /project:manual (handle blockers)
-12:00 - /project:status (check progress)
-14:00 - /project:manual done 45
-16:00 - /project:status
-17:30 - /project:maintain
-18:00 - /project:auto start --hours=09-18
+09:00 - Create/review GitHub issues for the day
+09:15 - /project:work 101,102,103 6
+09:30 - Coffee while workers analyze and start ☕
+10:00 - /project:status (check initial progress)
+11:00 - /project:add 104 --priority=high (urgent request)
+12:00 - /project:status --watch (monitor during lunch)
+14:00 - Review some PRs, merge approved ones
+15:00 - /project:add 105,106 (afternoon work)
+16:30 - /project:status (check day's progress)
+17:00 - /project:stop (graceful shutdown)
+
+Next day:
+09:00 - /project:resume (continue queue)
 ```
 
-This workflow maximizes productivity while maintaining control and visibility.
+## 🚀 Advanced Workflows
+
+### Continuous Integration
+```bash
+# Start workers with auto-merge
+/project:work 110,111 8 --auto-merge
+
+# Small, safe PRs get merged automatically
+# Large changes wait for review
+```
+
+### Multi-Repository Work
+```bash
+# In repo A
+/project:work 1,2 4
+
+# In repo B  
+/project:work 10,11 4
+
+# Workers isolated per repository
+# Monitor both with separate status commands
+```
+
+### Team Collaboration
+```bash
+# Developer 1: Frontend issues
+/project:work 201,202,203 4
+
+# Developer 2: Backend issues
+/project:work 301,302,303 4
+
+# Each developer runs their own workers
+# No conflicts as they work on different issues
+```
+
+This workflow maximizes parallel development while maintaining simplicity and control!

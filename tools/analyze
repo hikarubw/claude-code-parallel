@@ -1,0 +1,278 @@
+#!/bin/bash
+# Issue analyzer - uses Claude to intelligently break down issues into subissues
+
+# Configuration
+CLAUDE_PATH=$(command -v claude || echo "/opt/homebrew/bin/claude")
+ANALYZE_DIR="$HOME/.claude/analysis"
+mkdir -p "$ANALYZE_DIR"
+
+# Function to analyze a single issue
+analyze_issue() {
+    local issue_num="$1"
+    local max_subissues="${2:-5}"
+    
+    echo "🤖 Analyzing issue #$issue_num..."
+    
+    # Get issue details
+    local issue_json=$(gh issue view "$issue_num" --json title,body,labels,milestone)
+    local issue_title=$(echo "$issue_json" | jq -r .title)
+    local issue_body=$(echo "$issue_json" | jq -r .body)
+    local issue_labels=$(echo "$issue_json" | jq -r '.labels[].name' | tr '\n' ',')
+    
+    # Save issue content for analysis
+    local analysis_file="$ANALYZE_DIR/issue-$issue_num.md"
+    cat > "$analysis_file" << EOF
+# Issue #$issue_num: $issue_title
+
+## Labels
+$issue_labels
+
+## Description
+$issue_body
+EOF
+    
+    # Create Claude prompt
+    local prompt="I need you to analyze GitHub issue #$issue_num and break it down into concrete subissues.
+
+Here's the issue content:
+
+$(cat "$analysis_file")
+
+Please analyze this issue and create 2-$max_subissues subissues that:
+1. Are independently implementable (no blocking dependencies between subissues)
+2. Can be completed in 2-4 hours each
+3. Have clear, specific acceptance criteria
+4. Together fully address the parent issue
+
+For EACH subissue, create a GitHub issue with this EXACT format:
+
+---
+gh issue create --title \"[#$issue_num] <specific subissue title>\" --body \"## Parent Issue
+#$issue_num
+
+## Objective
+<clear description of what needs to be done>
+
+## Acceptance Criteria
+- [ ] <specific, testable criterion>
+- [ ] <specific, testable criterion>
+- [ ] <specific, testable criterion>
+
+## Technical Approach
+<brief technical approach or implementation notes>
+
+## Estimated Hours
+<2-4>
+
+---
+_Automated subissue from parent #$issue_num_\" --label \"subissue\"
+---
+
+Important:
+- Each 'gh issue create' command should be on a single line
+- Make titles specific and descriptive
+- Focus on logical separation of work
+- If the issue mentions tests, create a separate subissue for test implementation
+- If the issue mentions documentation, create a separate subissue for docs
+
+After creating the subissues, also provide a summary of how the subissues cover the parent issue requirements."
+    
+    # Run Claude analysis
+    echo "$prompt" | $CLAUDE_PATH | tee "$ANALYZE_DIR/analysis-$issue_num.log"
+    
+    echo ""
+    echo "✅ Analysis complete for issue #$issue_num"
+    echo "📄 Full analysis saved to: $ANALYZE_DIR/analysis-$issue_num.log"
+}
+
+# Function to extract created subissue numbers from analysis log
+extract_subissues() {
+    local issue_num="$1"
+    local log_file="$ANALYZE_DIR/analysis-$issue_num.log"
+    
+    if [ ! -f "$log_file" ]; then
+        echo "❌ No analysis log found for issue #$issue_num"
+        return 1
+    fi
+    
+    echo "📋 Extracting subissue numbers from analysis..."
+    
+    # Look for created issue URLs or numbers in the output
+    grep -o "#[0-9]\+" "$log_file" | grep -v "#$issue_num" | sort -u
+}
+
+# Function to add subissues to queue
+queue_subissues() {
+    local parent_issue="$1"
+    local priority="${2:-2}"
+    
+    echo "📥 Adding subissues to queue for parent #$parent_issue..."
+    
+    # Get all subissues that reference this parent
+    local subissues=$(gh issue list --search "[#$parent_issue]" --json number,title --jq '.[].number')
+    
+    if [ -z "$subissues" ]; then
+        echo "❌ No subissues found for parent #$parent_issue"
+        echo "💡 Tip: Run 'analyze issue $parent_issue' first"
+        return 1
+    fi
+    
+    # Add each subissue to queue
+    local count=0
+    for subissue in $subissues; do
+        $HOME/Documents/repo/claude-code-tools/tools/queue add "$priority" "$parent_issue" "$subissue"
+        ((count++))
+    done
+    
+    echo "✅ Added $count subissues to queue"
+}
+
+# Function to check if an issue has already been analyzed
+check_analyzed() {
+    local issue_num="$1"
+    
+    # Check if subissues exist
+    local subissue_count=$(gh issue list --search "[#$issue_num]" --json number | jq length)
+    
+    if [ "$subissue_count" -gt 0 ]; then
+        echo "ℹ️  Issue #$issue_num already has $subissue_count subissues"
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function to analyze multiple issues
+analyze_multiple() {
+    local issues="$1"
+    local priority="${2:-2}"
+    
+    # Convert comma-separated list to array
+    IFS=',' read -ra issue_array <<< "$issues"
+    
+    echo "🔄 Analyzing ${#issue_array[@]} issues..."
+    echo ""
+    
+    for issue in "${issue_array[@]}"; do
+        # Remove leading/trailing spaces and # if present
+        issue=$(echo "$issue" | tr -d ' #')
+        
+        if check_analyzed "$issue"; then
+            echo "⏭️  Skipping already analyzed issue #$issue"
+        else
+            analyze_issue "$issue"
+            sleep 2  # Brief pause between analyses
+        fi
+        
+        # Queue subissues
+        queue_subissues "$issue" "$priority"
+        echo ""
+    done
+}
+
+# Function to estimate work
+estimate_work() {
+    local issue_num="$1"
+    
+    echo "📊 Estimating work for issue #$issue_num..."
+    
+    # Get issue complexity
+    local issue_body=$(gh issue view "$issue_num" --json body -q .body)
+    local line_count=$(echo "$issue_body" | wc -l)
+    local checkbox_count=$(echo "$issue_body" | grep -c "^\s*-\s*\[")
+    
+    # Simple heuristic
+    local estimated_hours=4
+    if [ $line_count -gt 50 ] || [ $checkbox_count -gt 5 ]; then
+        estimated_hours=8
+    elif [ $line_count -lt 10 ]; then
+        estimated_hours=2
+    fi
+    
+    local estimated_subissues=$((estimated_hours / 3))
+    [ $estimated_subissues -lt 2 ] && estimated_subissues=2
+    [ $estimated_subissues -gt 5 ] && estimated_subissues=5
+    
+    echo "Estimated complexity: $estimated_hours hours"
+    echo "Recommended subissues: $estimated_subissues"
+}
+
+# Main command handling
+case "${1:-help}" in
+    issue)
+        shift
+        if [ -z "$1" ]; then
+            echo "Usage: analyze issue ISSUE_NUMBER [MAX_SUBISSUES]"
+            exit 1
+        fi
+        analyze_issue "$@"
+        ;;
+    
+    multiple)
+        shift
+        if [ -z "$1" ]; then
+            echo "Usage: analyze multiple ISSUE_NUMBERS [PRIORITY]"
+            echo "Example: analyze multiple 123,124,125 2"
+            exit 1
+        fi
+        analyze_multiple "$@"
+        ;;
+    
+    queue)
+        shift
+        if [ -z "$1" ]; then
+            echo "Usage: analyze queue PARENT_ISSUE [PRIORITY]"
+            exit 1
+        fi
+        queue_subissues "$@"
+        ;;
+    
+    extract)
+        shift
+        if [ -z "$1" ]; then
+            echo "Usage: analyze extract ISSUE_NUMBER"
+            exit 1
+        fi
+        extract_subissues "$@"
+        ;;
+    
+    check)
+        shift
+        if [ -z "$1" ]; then
+            echo "Usage: analyze check ISSUE_NUMBER"
+            exit 1
+        fi
+        check_analyzed "$@" && exit 0 || exit 1
+        ;;
+    
+    estimate)
+        shift
+        if [ -z "$1" ]; then
+            echo "Usage: analyze estimate ISSUE_NUMBER"
+            exit 1
+        fi
+        estimate_work "$@"
+        ;;
+    
+    *)
+        echo "Usage: analyze <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  issue NUMBER [MAX]     - Analyze single issue"
+        echo "  multiple NUMBERS [PRI] - Analyze multiple issues"
+        echo "  queue PARENT [PRI]     - Add subissues to queue"
+        echo "  extract NUMBER         - Extract subissue numbers"
+        echo "  check NUMBER          - Check if already analyzed"
+        echo "  estimate NUMBER       - Estimate work complexity"
+        echo ""
+        echo "Examples:"
+        echo "  analyze issue 123              # Analyze issue #123"
+        echo "  analyze multiple 123,124,125   # Analyze multiple issues"
+        echo "  analyze queue 123 1           # Queue subissues with priority 1"
+        echo ""
+        echo "Workflow:"
+        echo "  1. analyze issue 123          # Creates subissues"
+        echo "  2. analyze queue 123          # Adds to worker queue"
+        echo "  3. worker start 4             # Workers process queue"
+        ;;
+esac

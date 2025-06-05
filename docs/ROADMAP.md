@@ -1,131 +1,149 @@
-# Claude Code Parallel - Development Roadmap
+# Claude Code Tools - Development Roadmap
 
-## Current State (v2.0.0)
-- ✅ Core parallel execution with tmux/worktrees
-- ✅ Task queue with dependency management
-- ✅ GitHub integration for issue breakdown
-- ✅ **Autonomous operation** with 90% fewer interruptions
-- ✅ Intelligent branch naming (feature/, bugfix/, docs/)
-- ✅ Worktree-specific permissive settings
-- ✅ Comprehensive documentation with guides and FAQ
+## Current State (v3.0.0)
+- ✅ **Subissue-Based Worker Pool Architecture**
+- ✅ Intelligent issue analysis with Claude
+- ✅ Priority queue management
+- ✅ Autonomous worker sessions
+- ✅ Automatic PR creation
+- ✅ Resume capability
+- ✅ 99% autonomous operation
 
 ## Philosophy
-- **Simple tools**: Each tool stays under 200 lines
-- **Claude provides intelligence**: Tools are "hands", not "brains"
-- **Natural workflows**: Work with existing tools and conventions
-- **Safe autonomy**: Freedom within isolated worktrees
+- **Simple interface**: One command to start everything
+- **Claude intelligence**: AI analyzes and decomposes work
+- **Natural GitHub flow**: Issues → Subissues → PRs
+- **Zero configuration**: Just provide issue numbers
+
+## Architecture Evolution
+
+### v1.0 (Original)
+- Issue-based parallelism
+- Manual orchestration
+- Limited scalability
+
+### v2.0 (Task-Based) - Archived
+- Checklist items as tasks
+- Complex ID system (#47-1)
+- Manual task creation
+
+### v3.0 (Current) - Subissue-Based
+- Automatic issue decomposition
+- Worker pool pattern
+- Priority queue system
+- Fully autonomous
 
 ## Future Directions
 
-### Near Term (v2.1.0) - Task-Based Architecture + Claude Code Enhancements
-- **Transform to Task-Based Parallelism**
-  - GitHub issue checklists as work units
-  - Each checkbox = parallel task
-  - Visual progress tracking
-  - Timeline: 3 weeks (~40 hours)
+### Near Term (v3.1.0) - Enhanced Intelligence
+- **Smarter Issue Analysis**
+  - Learn from successful patterns
+  - Optimize subissue sizing
+  - Better dependency detection
   
-- **Core Tool Updates**
-  - `github`: Parse and update checklists
-  - `task`: New format (#47-1 instead of #47)
-  - `session`: Task-specific branches
+- **Advanced Queue Management**
+  - Dynamic priority adjustment
+  - Predictive task assignment
+  - Load balancing algorithms
   
-- **New Commands**
-  - `/project:setup-tasks`: Convert issue to tasks
-  - `/project:work-on #47-1`: Start specific task
-  - `/project:task-status`: Cross-issue task view
+- **Performance Monitoring**
+  - Real-time metrics dashboard
+  - Worker efficiency tracking
+  - Bottleneck identification
+
+### Medium Term (v3.2.0) - Scale & Integration
+- **Distributed Workers**
+  - Run workers on multiple machines
+  - Central queue server
+  - Network resilience
   
-- **Claude Code Integration Enhancements** 🆕
-  - **Extended Thinking**: Add prompts for complex task planning
-  - **Continue Command**: `/project:continue [session-id]` to resume sessions
-  - **Screenshot Support**: Document visual debugging workflows
-  - **Error Recovery**: Enhanced error handling with visual aids
-
-- **Session Management Improvements** 🆕
-  - **Multi-pane Sessions**: Use tmux panes instead of separate sessions
-  - **Single Session Architecture**: One tmux session with multiple panes
-  - **Benefits**: Better resource usage, easier monitoring, simpler management
-  - **Implementation**: Each task gets a pane within claude-parallel session
-
-### Medium Term (v2.2.0)
-- **Task Automation**
-  - Auto-update checklists on PR merge
-  - Smart task dependency resolution
-  - Bulk task operations
+- **CI/CD Integration**
+  - Auto-merge approved PRs
+  - Continuous deployment triggers
+  - Test result feedback
   
-- **Performance & Scale**
-  - Session pooling for instant starts
-  - Handle 20+ parallel tasks
-  - Resource optimization
+- **Team Features**
+  - Shared worker pools
+  - Team dashboards
+  - Work attribution
+
+### Long Term (v4.0.0) - AI-Native Development
+- **Predictive Development**
+  - Suggest issues from codebase analysis
+  - Proactive technical debt identification
+  - Architecture evolution recommendations
   
-- **Claude Code Advanced Features** 🆕
-  - **MCP Integration**: Detect and use available MCP tools
-  - **Project Memory**: Auto-generate CLAUDE.md for each project
-  - **Version Detection**: Ensure Claude Code compatibility
-  - **Image Workflows**: Process architecture diagrams and UI mockups
-
-### Long Term (v3.0.0)
-- **Advanced Architectures**
-  - Dependency Graph: Auto-discover work from code
-  - Intent-Directed: Focus on business value
-  - See ARCHITECTURE_MEMO.md for details
+- **Multi-Model Collaboration**
+  - Different AI models for different tasks
+  - Specialized workers (frontend, backend, tests)
+  - Cross-model review system
   
-- **Team Coordination**
-  - Multi-Claude collaboration
-  - Shared task queues
-  - Conflict prevention
+- **Self-Improving System**
+  - Learn from PR reviews
+  - Adapt to team coding styles
+  - Optimize for specific repositories
 
-## Recently Completed (v2.0.0)
+## Integration Roadmap
 
-### ✅ Autonomous Operation
-- Worktree isolation enables freedom
-- Permissive settings in worktrees
-- Maintained safety through PR gateway
+### Claude Code Features
+- ✅ Extended thinking for complex analysis
+- ✅ Continue/resume for session recovery
+- ✅ Screenshot analysis for debugging
+- 🔄 MCP tool detection and usage
+- 🔄 Project-specific CLAUDE.md generation
 
-### ✅ Claude Code Architecture Alignment (Code Review)
-- Perfect slash command implementation
-- Proper `$ARGUMENTS` usage throughout
-- Follows "simple tools + intelligent orchestration"
-- Architecture score: 95/100
+### GitHub Features
+- ✅ Issue parsing and analysis
+- ✅ Subissue creation
+- ✅ PR creation with linking
+- 🔄 PR review integration
+- 🔄 GitHub Actions triggers
 
-### ✅ Intelligent Branch Management
-- Claude decides branch names based on content
-- Not all issues need branches
-- Clean branch naming conventions
+## Success Metrics
 
-### ✅ Documentation Overhaul
-- Quick Start guide for newcomers
-- FAQ for common questions
-- Architecture deep dive
-- Complete documentation index
+### Current Performance
+- **Throughput**: 2-3 PRs/hour/worker
+- **Quality**: 95% PR approval rate
+- **Autonomy**: 99% unattended operation
+- **Reliability**: <2 min recovery time
+
+### Target Improvements
+- **Throughput**: 4-5 PRs/hour/worker
+- **Scale**: 50+ concurrent workers
+- **Intelligence**: 80% optimal task sizing
+- **Integration**: Full CI/CD automation
+
+## Community & Ecosystem
+
+### Near Term
+- Plugin system for custom analyzers
+- Repository templates
+- Best practices guide
+- Video tutorials
+
+### Long Term
+- Marketplace for worker templates
+- Enterprise features
+- SaaS offering
+- Certification program
 
 ## Key Principles
 
-1. **Simplicity First**: Every feature must justify complexity
-2. **Claude Intelligence**: Let Claude handle the "why" and "how"
-3. **User Safety**: Autonomous but always reviewable
-4. **Real Usage**: Features driven by actual needs
+1. **Simplicity**: Keep the interface minimal
+2. **Intelligence**: Let AI handle complexity
+3. **Reliability**: Robust error recovery
+4. **Scalability**: From solo to enterprise
 
 ## Contributing
 
 We welcome contributions that:
-- Keep tools simple and focused
-- Solve real user problems
-- Follow the Claude-first philosophy
-- Include clear documentation
+- Enhance AI intelligence
+- Improve worker efficiency
+- Simplify user experience
+- Add enterprise features
 
 See [CONTRIBUTING.md](../CONTRIBUTING.md) for guidelines.
 
-## Metrics of Success
-
-- Time to complete multiple issues
-- Reduction in context switching
-- Developer satisfaction
-- Code quality consistency
-- Approval interruption rate (target: <10%)
-- Claude Code feature utilization rate 🆕
-- Extended thinking usage for complex tasks 🆕
-- Session recovery success rate 🆕
-
 ---
 
-*The roadmap is living document - priorities adjust based on user feedback and real-world usage.*
+*This roadmap evolves based on user feedback and real-world usage patterns.*

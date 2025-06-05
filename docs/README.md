@@ -1,17 +1,24 @@
-# Claude Code Parallel Documentation
+# Claude Code Tools Documentation
 
-Welcome to the Claude Code Parallel documentation. Choose a guide based on your needs:
+Welcome to the Claude Code Tools documentation. This directory contains guides and references for using and understanding the tooling system.
 
 ## 🚀 Getting Started
 
 - **[Quick Start Guide](QUICK_START.md)** - Get running in 5 minutes
-- **[Installation Guide](INSTALLATION.md)** - Detailed setup instructions
 - **[Workflow Guide](WORKFLOW.md)** - Common development patterns
+- **[FAQ](FAQ.md)** - Frequently asked questions
 
-## 🎯 Core Features
+## 🎯 Core Concepts
 
-- **[Autonomous Operation](AUTONOMOUS_OPERATION.md)** - How worktree isolation enables 90% fewer interruptions
 - **[Architecture Overview](ARCHITECTURE.md)** - System design and philosophy
+- **[Autonomous Operation](AUTONOMOUS_OPERATION.md)** - How worktree isolation enables 90% fewer interruptions
+- **[Task-Based Architecture](TASK_BASED_ARCHITECTURE.md)** - Task management system design
+
+## 🔧 Advanced Topics
+
+- **[Complete Automation Workflow](COMPLETE_AUTOMATION_WORKFLOW.md)** - End-to-end automation strategies
+- **[Automated Checklist Strategies](AUTOMATED_CHECKLIST_UPDATE_STRATEGIES.md)** - Checklist automation patterns
+- **[Integration Enhancements](INTEGRATION_ENHANCEMENTS.md)** - Claude Code integration improvements
 
 ## 📚 Reference
 
@@ -37,10 +44,14 @@ Each tool does one thing well (~50-200 lines). Claude provides the intelligence.
 ### Natural Workflows
 Works with your existing GitHub workflow. No new concepts to learn.
 
+## 📁 Archive
+
+The `archive/` directory contains historical proposals and research documents that informed the current design but are not part of the active documentation.
+
 ## 🆘 Help & Support
 
-- **Issues**: [GitHub Issues](https://github.com/hikarubw/claude-code-parallel/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/hikarubw/claude-code-parallel/discussions)
+- **Issues**: [GitHub Issues](https://github.com/hikarubw/claude-code-tools/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/hikarubw/claude-code-tools/discussions)
 
 ---
 

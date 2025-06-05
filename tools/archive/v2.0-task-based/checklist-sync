@@ -1,0 +1,169 @@
+#!/bin/bash
+# Sync issue checklists with PR status
+
+REPO_OWNER=$(gh repo view --json owner -q .owner.login)
+REPO_NAME=$(gh repo view --json name -q .name)
+
+# Function to extract task ID from PR
+extract_task_id() {
+    local pr_title="$1"
+    local pr_branch="$2"
+    
+    # Try title first
+    if [[ "$pr_title" =~ \#([0-9]+)-([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+        return
+    fi
+    
+    # Try branch name
+    if [[ "$pr_branch" =~ task/([0-9]+)-([0-9]+) ]]; then
+        echo "${BASH_REMATCH[1]}-${BASH_REMATCH[2]}"
+        return
+    fi
+    
+    echo ""
+}
+
+# Function to update checkbox in issue
+update_checkbox() {
+    local issue_num="$1"
+    local task_num="$2"
+    local check_status="$3"  # true/false
+    
+    echo "Updating issue #$issue_num, task $task_num to $check_status"
+    
+    # Get current issue body
+    local issue_body=$(gh issue view "$issue_num" --json body -q .body)
+    
+    # Count checkboxes and update the nth one
+    local updated_body=$(echo "$issue_body" | awk -v n="$task_num" -v status="$check_status" '
+        BEGIN { count = 0 }
+        {
+            if ($0 ~ /^[[:space:]]*-[[:space:]]*\[[[:space:]]*\]/) {
+                count++
+                if (count == n && status == "true") {
+                    sub(/\[[[:space:]]*\]/, "[x]", $0)
+                }
+            } else if ($0 ~ /^[[:space:]]*-[[:space:]]*\[[[:space:]]*x[[:space:]]*\]/) {
+                count++
+                if (count == n && status == "false") {
+                    sub(/\[[[:space:]]*x[[:space:]]*\]/, "[ ]", $0)
+                }
+            }
+            print
+        }
+    ')
+    
+    # Update the issue
+    gh issue edit "$issue_num" --body "$updated_body"
+}
+
+# Function to sync all PRs with issues
+sync_all() {
+    echo "🔄 Syncing all task PRs with issue checklists..."
+    
+    # Get all open PRs with task branches
+    local prs=$(gh pr list --json number,title,headRefName,state --jq '.[] | select(.headRefName | startswith("task/"))')
+    
+    while IFS= read -r pr; do
+        local pr_num=$(echo "$pr" | jq -r .number)
+        local pr_title=$(echo "$pr" | jq -r .title)
+        local pr_branch=$(echo "$pr" | jq -r .headRefName)
+        local pr_state=$(echo "$pr" | jq -r .state)
+        
+        local task_id=$(extract_task_id "$pr_title" "$pr_branch")
+        if [ -n "$task_id" ]; then
+            local issue_num="${task_id%-*}"
+            local task_num="${task_id#*-}"
+            
+            if [ "$pr_state" = "MERGED" ]; then
+                update_checkbox "$issue_num" "$task_num" "true"
+                echo "✅ Marked task #$task_id as complete"
+            fi
+        fi
+    done <<< "$prs"
+    
+    echo "✨ Sync complete!"
+}
+
+# Function to preview changes
+preview() {
+    echo "👀 Preview mode - showing what would be updated:"
+    
+    local prs=$(gh pr list --json number,title,headRefName,state --jq '.[] | select(.headRefName | startswith("task/"))')
+    
+    while IFS= read -r pr; do
+        local pr_num=$(echo "$pr" | jq -r .number)
+        local pr_title=$(echo "$pr" | jq -r .title)
+        local pr_branch=$(echo "$pr" | jq -r .headRefName)
+        local pr_state=$(echo "$pr" | jq -r .state)
+        
+        local task_id=$(extract_task_id "$pr_title" "$pr_branch")
+        if [ -n "$task_id" ]; then
+            echo "PR #$pr_num ($pr_state): Would update task #$task_id"
+        fi
+    done <<< "$prs"
+}
+
+# Function to check specific issue
+check_issue() {
+    local issue_num="$1"
+    
+    echo "📋 Checking issue #$issue_num..."
+    
+    # Get issue details
+    local issue_body=$(gh issue view "$issue_num" --json body -q .body)
+    
+    # Count total checkboxes
+    local total_boxes=$(echo "$issue_body" | grep -c '^\s*-\s*\[')
+    local checked_boxes=$(echo "$issue_body" | grep -c '^\s*-\s*\[x\]')
+    
+    echo "Progress: $checked_boxes/$total_boxes checkboxes completed"
+    
+    # Find related PRs
+    echo -e "\nRelated PRs:"
+    gh pr list --search "Updates #$issue_num OR task/$issue_num-" --json number,title,state \
+        --jq '.[] | "PR #\(.number): \(.title) [\(.state)]"'
+}
+
+# Main command handling
+case "$1" in
+    sync)
+        sync_all
+        ;;
+    
+    preview)
+        preview
+        ;;
+    
+    check)
+        if [ -z "$2" ]; then
+            echo "Usage: checklist-sync check ISSUE_NUMBER"
+            exit 1
+        fi
+        check_issue "$2"
+        ;;
+    
+    update)
+        if [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ]; then
+            echo "Usage: checklist-sync update ISSUE_NUM TASK_NUM true|false"
+            exit 1
+        fi
+        update_checkbox "$2" "$3" "$4"
+        ;;
+    
+    *)
+        echo "Usage: checklist-sync <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  sync              - Sync all PR statuses with issue checklists"
+        echo "  preview           - Preview what would be updated"
+        echo "  check ISSUE       - Check status of specific issue"
+        echo "  update I T STATUS - Update issue I, task T to STATUS (true/false)"
+        echo ""
+        echo "Examples:"
+        echo "  checklist-sync sync                # Sync all PRs"
+        echo "  checklist-sync check 47            # Check issue #47"
+        echo "  checklist-sync update 47 3 true    # Mark task #47-3 as complete"
+        ;;
+esac

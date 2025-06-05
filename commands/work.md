@@ -1,132 +1,370 @@
-# Start Task-Based Parallel Development
+# 🚀 `/project:work` - Subissue-Based Parallel Development
 
-Begin intelligent parallel development with automatic task orchestration.
+## Overview
 
-Usage: /project:work [N] [options]
+The `/project:work` command implements an intelligent parallel development system that:
+1. Analyzes GitHub issues to create logical subissues
+2. Manages a priority queue of work items
+3. Orchestrates multiple Claude workers to process subissues
+4. Creates pull requests automatically
+5. Tracks progress in real-time
 
-Arguments: $ARGUMENTS
+## Basic Usage
 
-## What I'll Do
+```bash
+# Work on a single issue with 4 workers (default)
+/project:work 123
 
-1. **Start Parallel Sessions**
-   - Create N tmux sessions (default: 3)
-   - Each session gets a dedicated worktree
-   - Sessions named claude-1, claude-2, etc.
+# Work on a single issue with 8 workers
+/project:work 123 8
 
-2. **Intelligent Task Assignment**
-   - Get next unblocked task from queue
-   - Tasks identified as `#issue-task` (e.g., #47-3)
-   - Check task dependencies are satisfied
-   - Verify task type (claude-work vs manual-work)
-   - Create isolated worktree for the task
-   - Assign to available session
+# Work on multiple issues with 10 workers
+/project:work 123,124,125 10
 
-3. **Automatic Orchestration**
-   - Monitor session progress
-   - Detect completion (PR created, tests pass)
-   - Update issue checklist on PR merge
-   - Clean completed worktrees
-   - Assign new tasks automatically
-
-4. **Task-Based Workflow**
-   - Each task gets its own branch/PR
-   - PRs reference the checklist item
-   - Issues stay open until all tasks complete
-   - Better granularity than issue-based approach
-
-5. **Error Detection & Recovery**
-   - Monitor for stuck or failing sessions
-   - Automatically retry with different approaches
-   - Escalate persistent failures for manual help
-   - Use extended thinking for complex debugging
-
-## Options Parsing
-I'll parse your arguments for:
-- Number of sessions (first number)
-- `--focus=ISSUE` (work on specific issue's tasks)
-- `--watch` (continuous monitoring)
-- `--prefer-small` (prioritize quick tasks)
-
-## Task Selection Strategy
-- Prioritize unblocked tasks
-- Consider dependencies across issues
-- Skip manual-work tasks (marked with 👤)
-- Balance work across different issues
-
-## Example Usage
-```
-# Start 5 sessions
-/project:work 5
-
-# Focus on issue #10's tasks
-/project:work 3 --focus=10
-
-# Prefer small tasks first
-/project:work --prefer-small
+# Work with specific priority
+/project:work 123 4 --priority=high
 ```
 
-## Live Example
+## Command Syntax
+
 ```
-Starting task-based parallel development...
-✓ Created 5 sessions with worktrees
+/project:work ISSUES [WORKERS] [OPTIONS]
 
-Session assignments:
-claude-1: Working on #10-1 (Create theme context provider)
-         Branch: task/#10-1-theme-context
-         Worktree: .worktrees/task-10-1
-claude-2: Working on #10-3 (Add theme toggle component)  
-         Branch: task/#10-3-theme-toggle
-         Worktree: .worktrees/task-10-3
-claude-3: Working on #11-2 (Write auth unit tests)
-         Branch: task/#11-2-auth-tests
-         Worktree: .worktrees/task-11-2
-claude-4: Idle (waiting for #10-5 - manual task)
-claude-5: Working on #12-1 (Update API documentation)
-         Branch: task/#12-1-api-docs
-         Worktree: .worktrees/task-12-1
+Arguments:
+  ISSUES    - Issue number(s) to work on (comma-separated)
+  WORKERS   - Number of parallel workers (default: 4)
 
-Status: 4/5 sessions active
-Queue: 23 tasks (14 ready, 9 blocked)
-Issues: 3 active (#10, #11, #12)
-
-Monitoring enabled - will assign new tasks automatically.
+Options:
+  --priority=LEVEL     - Set priority (critical|high|normal|low)
+  --auto-merge         - Enable auto-merge for approved PRs
+  --extended-thinking  - Use extended thinking for complex issues
+  --dry-run           - Preview what would be done without starting
 ```
 
-## PR Creation
-Each task PR will:
-- Title: "Task #10-1: Create theme context provider"
-- Body: References checklist item in issue #10
-- Labels: Inherit from parent issue
-- Auto-updates checklist on merge
+## Complete Workflow Example
 
-## Error Recovery & Continuation
-Claude Code's continuation features are perfect for parallel work:
-- **Session interruption**: Use `claude --continue` to resume the last session
-- **Specific session recovery**: Use `claude --resume` to pick a session to continue
-- **Stuck sessions**: I can detect and recover stuck sessions automatically
-- **Failed tasks**: I'll retry with different approaches or escalate for manual help
+```bash
+# 1. Start work on issues #123 and #124 with 8 workers
+$ /project:work 123,124 8
 
-### Common Recovery Scenarios
-1. **Claude Code crashes during work**:
-   ```bash
-   claude --continue  # Resumes exactly where you left off
-   ```
+🤖 Analyzing issues...
+✓ Issue #123: Found 4 logical subissues
+✓ Issue #124: Found 3 logical subissues
 
-2. **Need to switch between parallel sessions**:
-   ```bash
-   claude --resume   # Shows list of sessions to choose from
-   ```
+📋 Creating subissues...
+✓ Created #201: [#123] Implement user model
+✓ Created #202: [#123] Add authentication endpoints
+✓ Created #203: [#123] Create login UI
+✓ Created #204: [#123] Add test coverage
+✓ Created #205: [#124] Design API schema
+✓ Created #206: [#124] Implement REST endpoints
+✓ Created #207: [#124] Add OpenAPI documentation
 
-3. **Session stuck on failing tests**:
-   - I'll detect repeated failures
-   - Try alternative solutions
-   - Flag for manual intervention if needed
+📥 Adding to queue...
+✓ 7 subissues added to work queue
 
-📚 **Reference**: [Resuming Conversations](https://docs.anthropic.com/en/docs/claude-code/tutorials#resuming-previous-conversations)
+🚀 Starting 8 workers...
+✓ worker-1: Processing #201
+✓ worker-2: Processing #202
+✓ worker-3: Processing #203
+✓ worker-4: Processing #204
+✓ worker-5: Processing #205
+✓ worker-6: Processing #206
+✓ worker-7: Processing #207
+✓ worker-8: Idle (waiting for work)
 
-## Tips
-- Use `/project:status` to see task progress
-- Use `/project:manual` to complete manual tasks
-- Tasks complete faster than full issues
-- Better parallelism with smaller work units
-- Leverage `--continue` for seamless work resumption
+📊 Progress: 0/7 complete
+```
+
+## Monitoring Progress
+
+### Real-time Status
+```bash
+# Show current status
+/project:status
+
+👷 Worker Pool Status
+===================
+worker-1: working on #201
+worker-2: working on #202
+worker-3: completed #203
+worker-4: working on #204
+worker-5: idle
+worker-6: working on #206
+worker-7: completed #207
+worker-8: idle
+
+📊 Queue Status
+==============
+Pending:   0
+Working:   4
+Completed: 3
+Failed:    0
+
+📋 Parent Issues
+===============
+#123: 75% complete (3/4 subissues)
+#124: 33% complete (1/3 subissues)
+```
+
+### Live Dashboard
+```bash
+# Watch progress in real-time
+/project:status --watch
+
+┌─────────────────────────────────────────────────┐
+│          WORKER POOL DASHBOARD                   │
+├─────────────────────────────────────────────────┤
+│ Time: 2024-12-05 14:30:45 | Uptime: 2h 15m     │
+├─────────────────────────────────────────────────┤
+│ WORKERS (8/8 active)                            │
+│ ├─ worker-1: PR #208 created                    │
+│ ├─ worker-2: Working on #202 (45m)             │
+│ ├─ worker-3: PR #209 in review                 │
+│ └─ ...                                         │
+├─────────────────────────────────────────────────┤
+│ THROUGHPUT                                      │
+│ Last hour: 4 PRs | Today: 15 PRs | Avg: 22m   │
+└─────────────────────────────────────────────────┘
+```
+
+## Worker Management
+
+### Add More Workers
+```bash
+# Add 4 more workers to speed up
+/project:workers add 4
+
+➕ Adding 4 workers...
+✅ Started worker-9
+✅ Started worker-10
+✅ Started worker-11
+✅ Started worker-12
+```
+
+### Remove Workers
+```bash
+# Remove 2 workers
+/project:workers remove 2
+
+🛑 Stopping 2 workers...
+✅ Stopped worker-12
+✅ Stopped worker-11
+```
+
+### Worker Logs
+```bash
+# View specific worker logs
+/project:logs worker-3
+
+📋 Worker-3 Activity Log
+========================
+[14:25:32] Processing subissue #203
+[14:25:45] Created worktree at ~/worktrees/subissue-203
+[14:26:01] Running Claude session
+[14:45:23] Committed changes
+[14:46:12] Created PR #209
+[14:46:45] Completed subissue #203
+```
+
+## Queue Management
+
+### View Queue
+```bash
+# Show current queue
+/project:queue show
+
+Priority | Parent | Subissue | Status  | Worker
+---------|--------|----------|---------|--------
+1        | #125   | #211     | pending | none
+2        | #123   | #202     | working | worker-2
+2        | #124   | #206     | working | worker-6
+3        | #126   | #212     | pending | none
+```
+
+### Prioritize Work
+```bash
+# Change priority of a subissue
+/project:queue priority 212 high
+
+✅ Updated subissue #212 to priority 1
+```
+
+### Retry Failed Items
+```bash
+# Retry all failed subissues
+/project:queue retry all
+
+🔄 Retrying all failed items...
+↩️ Moved #210 back to queue
+↩️ Moved #213 back to queue
+✅ 2 failed items returned to queue
+```
+
+## Advanced Features
+
+### Extended Thinking Mode
+```bash
+# Use for complex architectural issues
+/project:work 150 4 --extended-thinking
+
+🧠 Extended thinking enabled for complex analysis
+```
+
+### Auto-merge Setup
+```bash
+# Enable auto-merge for small PRs
+/project:work 123 8 --auto-merge
+
+🔄 Auto-merge enabled for approved PRs under 100 lines
+```
+
+### Dry Run
+```bash
+# Preview without starting
+/project:work 123,124 8 --dry-run
+
+🔍 DRY RUN MODE
+Would analyze: #123, #124
+Estimated subissues: 7-10
+Estimated time: 3-4 hours with 8 workers
+No workers will be started
+```
+
+## Stopping and Resuming
+
+### Graceful Stop
+```bash
+# Stop all workers after current tasks
+/project:stop
+
+🛑 Initiating graceful shutdown...
+⏸️ Workers will stop after completing current tasks
+💾 State saved for resume
+```
+
+### Resume Work
+```bash
+# Resume from where you left off
+/project:resume
+
+🔄 Resuming work...
+✓ Restored 5 pending items to queue
+✓ Started 8 workers (previous configuration)
+✓ Continuing from subissue #206
+```
+
+## Integration with CI/CD
+
+The system automatically:
+1. Creates PRs with proper formatting
+2. Links subissues to parent issues
+3. Updates parent issue progress
+4. Triggers CI/CD pipelines
+5. Closes parent issues when all subissues complete
+
+## Best Practices
+
+### 1. Issue Preparation
+```markdown
+# Good Issue Structure
+Title: Add user authentication system
+
+## Requirements
+- JWT-based authentication
+- Role-based access control
+- Password reset functionality
+- Session management
+
+## Technical Notes
+- Use existing Express middleware
+- PostgreSQL for user storage
+- Follow REST API conventions
+```
+
+### 2. Optimal Worker Count
+- **Small issues (2-4 subissues)**: 2-4 workers
+- **Medium issues (5-8 subissues)**: 4-8 workers
+- **Large issues (9+ subissues)**: 8-12 workers
+- **Multiple issues**: 1.5x subissue count
+
+### 3. Priority Guidelines
+- **Critical**: Security fixes, breaking bugs
+- **High**: Core features, important fixes
+- **Normal**: Enhancements, refactoring
+- **Low**: Documentation, nice-to-haves
+
+## Troubleshooting
+
+### Workers Not Picking Up Tasks
+```bash
+# Check worker health
+/project:workers health
+
+# Restart stuck workers
+/project:workers restart
+```
+
+### Queue Issues
+```bash
+# Rebuild queue from GitHub
+/project:queue rebuild
+
+# Clear old completed items
+/project:queue clean 7
+```
+
+### PR Creation Failures
+```bash
+# Check worker logs
+/project:logs worker-3 50
+
+# Manually complete subissue
+/project:queue update 203 completed
+```
+
+## Complete Example Session
+
+```bash
+# Start development on feature request
+$ /project:work 150 6
+
+# Add urgent bug fix with high priority
+$ /project:add 151 --priority=critical
+
+# Monitor progress
+$ /project:status --watch
+
+# Add more workers for faster completion
+$ /project:workers add 4
+
+# Check specific parent issue
+$ /project:status issue 150
+
+# Stop for lunch
+$ /project:pause
+
+# Resume after lunch
+$ /project:resume
+
+# Gracefully stop when done
+$ /project:stop
+```
+
+## Tips and Tricks
+
+1. **Batch Similar Issues**: Group related issues for better context
+2. **Use Extended Thinking**: For architectural decisions
+3. **Monitor PR Quality**: Review first few PRs to ensure quality
+4. **Adjust Worker Count**: Based on queue size and complexity
+5. **Regular Cleanup**: Run `/project:queue clean` weekly
+
+## Related Commands
+
+- `/project:status` - Monitor progress
+- `/project:add` - Add more issues to queue  
+- `/project:pause` - Pause all workers
+- `/project:resume` - Resume paused work
+- `/project:stop` - Stop all workers
+- `/project:workers` - Manage worker pool
+- `/project:queue` - Manage work queue

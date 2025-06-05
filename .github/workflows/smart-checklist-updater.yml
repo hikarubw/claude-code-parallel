@@ -1,0 +1,207 @@
+name: Smart Checklist Updater
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  update-checklist:
+    if: |
+      github.event.pull_request.merged == true &&
+      startsWith(github.event.pull_request.head.ref, 'task/')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        
+      - name: Update Issue Checklists
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = context.payload.pull_request;
+            console.log(`\n📋 Processing PR #${pr.number}: ${pr.title}`);
+            console.log(`🌿 Branch: ${pr.head.ref}`);
+            
+            // === STEP 1: Extract Task Information ===
+            function extractTaskInfo(pr) {
+              const patterns = {
+                title: /#(\d+)-(\d+)/,
+                branch: /task\/(\d+)-(\d+)/,
+                body: /[Tt]ask #(\d+)-(\d+)/,
+                updates: /[Uu]pdates? #(\d+)/
+              };
+              
+              let issueNum = null;
+              let taskNum = null;
+              
+              // Try each source
+              for (const [source, pattern] of Object.entries(patterns)) {
+                const match = (source === 'updates') 
+                  ? pr.body?.match(pattern)
+                  : (pr[source] || pr.body)?.match(pattern);
+                  
+                if (match) {
+                  if (source === 'updates') {
+                    issueNum = parseInt(match[1]);
+                    console.log(`✓ Found issue #${issueNum} from Updates pattern`);
+                  } else {
+                    issueNum = parseInt(match[1]);
+                    taskNum = parseInt(match[2]);
+                    console.log(`✓ Found task #${issueNum}-${taskNum} from ${source}`);
+                    break;
+                  }
+                }
+              }
+              
+              return { issueNum, taskNum };
+            }
+            
+            // === STEP 2: Smart Checkbox Matching ===
+            async function updateIssueChecklist(issueNum, taskNum, pr) {
+              try {
+                const issue = await github.rest.issues.get({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNum
+                });
+                
+                const lines = issue.data.body.split('\n');
+                let checkboxCount = 0;
+                let updated = false;
+                let matchedLine = null;
+                
+                // Strategy 1: Position-based matching
+                for (let i = 0; i < lines.length; i++) {
+                  if (lines[i].match(/^\s*-\s*\[\s*\]/)) {
+                    checkboxCount++;
+                    if (checkboxCount === taskNum) {
+                      const originalLine = lines[i];
+                      lines[i] = lines[i].replace(/\[\s*\]/, '[x]');
+                      matchedLine = originalLine;
+                      updated = true;
+                      console.log(`✓ Updated checkbox #${taskNum} by position`);
+                      break;
+                    }
+                  }
+                }
+                
+                // Strategy 2: Content-based matching (if position fails)
+                if (!updated && pr.title) {
+                  // Extract task description from PR title
+                  const descMatch = pr.title.match(/#\d+-\d+:\s*(.+)$/);
+                  if (descMatch) {
+                    const keywords = descMatch[1].toLowerCase().split(/\s+/).slice(0, 3);
+                    console.log(`🔍 Searching for keywords: ${keywords.join(', ')}`);
+                    
+                    for (let i = 0; i < lines.length; i++) {
+                      if (lines[i].match(/^\s*-\s*\[\s*\]/)) {
+                        const lineText = lines[i].toLowerCase();
+                        const matches = keywords.filter(k => lineText.includes(k)).length;
+                        if (matches >= 2) {
+                          matchedLine = lines[i];
+                          lines[i] = lines[i].replace(/\[\s*\]/, '[x]');
+                          updated = true;
+                          console.log(`✓ Updated checkbox by content match (${matches}/${keywords.length} keywords)`);
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
+                
+                // Update issue if match found
+                if (updated) {
+                  await github.rest.issues.update({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issueNum,
+                    body: lines.join('\n')
+                  });
+                  
+                  // Add success comment
+                  const comment = `## ✅ Task Completed
+          
+          Task #${issueNum}-${taskNum} has been automatically marked as complete via PR #${pr.number}.
+          
+          **Matched checkbox:**
+          \`\`\`
+          ${matchedLine}
+          \`\`\`
+          
+          **PR Details:**
+          - Title: ${pr.title}
+          - Branch: \`${pr.head.ref}\`
+          - Merged by: @${pr.merged_by.login}
+          - Merge time: ${new Date(pr.merged_at).toLocaleString()}`;
+                  
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issueNum,
+                    body: comment
+                  });
+                  
+                  return { success: true, matchedLine };
+                } else {
+                  // Add manual intervention comment
+                  const comment = `## ⚠️ Manual Update Required
+          
+          Could not automatically update checkbox for task #${issueNum}-${taskNum} from PR #${pr.number}.
+          
+          **Possible reasons:**
+          - Checkbox might already be checked
+          - Task description might have changed
+          - Checkbox might have been reordered
+          
+          Please manually check the appropriate checkbox in this issue.
+          
+          **PR Details:**
+          - Title: ${pr.title}
+          - Branch: \`${pr.head.ref}\``;
+                  
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: issueNum,
+                    body: comment
+                  });
+                  
+                  return { success: false };
+                }
+              } catch (error) {
+                console.error(`❌ Error updating issue #${issueNum}: ${error.message}`);
+                throw error;
+              }
+            }
+            
+            // === STEP 3: Main Execution ===
+            try {
+              const { issueNum, taskNum } = extractTaskInfo(pr);
+              
+              if (!issueNum || !taskNum) {
+                console.log('⚠️ No task information found in PR');
+                return;
+              }
+              
+              const result = await updateIssueChecklist(issueNum, taskNum, pr);
+              
+              // Add summary to PR
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: result.success 
+                  ? `✅ Successfully updated issue #${issueNum} - task ${taskNum} marked as complete!`
+                  : `⚠️ Could not automatically update issue #${issueNum} - manual update required`
+              });
+              
+              // Set action output
+              core.setOutput('updated', result.success);
+              core.setOutput('issue', issueNum);
+              core.setOutput('task', taskNum);
+              
+            } catch (error) {
+              core.setFailed(`Failed to update checklist: ${error.message}`);
+            }
