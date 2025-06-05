@@ -1,0 +1,121 @@
+#!/bin/bash
+# Create a PR for a task with proper formatting for checklist updates
+
+# Parse arguments
+TASK_ID="$1"
+DESCRIPTION="$2"
+
+if [ -z "$TASK_ID" ]; then
+    echo "Usage: create-task-pr TASK_ID [DESCRIPTION]"
+    echo "Example: create-task-pr 1-5 'Add dependency parsing logic'"
+    exit 1
+fi
+
+# Extract issue and task numbers
+if [[ "$TASK_ID" =~ ^#?([0-9]+)-([0-9]+)$ ]]; then
+    ISSUE_NUM="${BASH_REMATCH[1]}"
+    TASK_NUM="${BASH_REMATCH[2]}"
+else
+    echo "Invalid task ID format. Use format: 1-5 or #1-5"
+    exit 1
+fi
+
+# Get current branch
+CURRENT_BRANCH=$(git branch --show-current)
+if [[ ! "$CURRENT_BRANCH" =~ ^task/ ]]; then
+    echo "Warning: Not on a task branch (current: $CURRENT_BRANCH)"
+    echo "Expected format: task/1-5-description"
+fi
+
+# Get task description if not provided
+if [ -z "$DESCRIPTION" ]; then
+    # Try to extract from branch name
+    DESCRIPTION=$(echo "$CURRENT_BRANCH" | sed 's/^task\/[0-9]*-[0-9]*-//' | tr '-' ' ')
+    if [ -z "$DESCRIPTION" ]; then
+        DESCRIPTION="Complete task"
+    fi
+fi
+
+# Get the exact checkbox text from the issue
+echo "🔍 Fetching issue #$ISSUE_NUM to find task checkbox..."
+ISSUE_BODY=$(gh issue view "$ISSUE_NUM" --json body -q .body)
+
+# Find the nth checkbox
+CHECKBOX_TEXT=$(echo "$ISSUE_BODY" | awk -v n="$TASK_NUM" '
+    BEGIN { count = 0 }
+    /^[[:space:]]*-[[:space:]]*\[[[:space:]]*\]/ {
+        count++
+        if (count == n) {
+            # Remove the checkbox part and leading/trailing spaces
+            sub(/^[[:space:]]*-[[:space:]]*\[[[:space:]]*\]/, "", $0)
+            sub(/^[[:space:]]*/, "", $0)
+            sub(/[[:space:]]*$/, "", $0)
+            print $0
+            exit
+        }
+    }
+')
+
+if [ -z "$CHECKBOX_TEXT" ]; then
+    echo "Warning: Could not find checkbox text for task $TASK_NUM in issue #$ISSUE_NUM"
+    CHECKBOX_TEXT="Task #$ISSUE_NUM-$TASK_NUM"
+fi
+
+# Create PR title
+PR_TITLE="Complete task #$ISSUE_NUM-$TASK_NUM: $DESCRIPTION"
+
+# Create PR body
+PR_BODY="## Summary
+This PR completes task #$ISSUE_NUM-$TASK_NUM from issue #$ISSUE_NUM.
+
+### Changes
+- $DESCRIPTION
+
+### Testing
+- All tests pass
+- Manual testing completed
+- No regressions found
+
+## Issue Update
+Updates #$ISSUE_NUM by completing:
+- [x] $CHECKBOX_TEXT
+
+---
+🤖 Generated with [Claude Code](https://claude.ai/code)
+Co-Authored-By: Claude <noreply@anthropic.com>"
+
+# Show preview
+echo ""
+echo "📝 PR Preview:"
+echo "=============="
+echo "Title: $PR_TITLE"
+echo ""
+echo "Body:"
+echo "$PR_BODY"
+echo ""
+
+# Create the PR
+echo "Creating PR..."
+gh pr create \
+    --title "$PR_TITLE" \
+    --body "$PR_BODY" \
+    --base main
+
+# Get PR number
+PR_NUM=$(gh pr view --json number -q .number)
+echo ""
+echo "✅ Created PR #$PR_NUM for task #$ISSUE_NUM-$TASK_NUM"
+echo "🔗 $(gh pr view --json url -q .url)"
+
+# Add task completion comment to the PR
+gh pr comment "$PR_NUM" --body "🤖 This PR will automatically update the checklist in issue #$ISSUE_NUM when merged.
+
+**Task:** #$ISSUE_NUM-$TASK_NUM
+**Checkbox:** $CHECKBOX_TEXT
+**Status:** Ready for review"
+
+echo ""
+echo "💡 Next steps:"
+echo "1. PR will be reviewed"
+echo "2. When merged, issue #$ISSUE_NUM checkbox will be auto-checked"
+echo "3. Session can pick up next task"

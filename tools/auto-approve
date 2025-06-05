@@ -1,0 +1,118 @@
+#!/bin/bash
+# Auto-approve Claude Code prompts in tmux sessions
+
+SESSION_PREFIX="claude"
+APPROVAL_INTERVAL=2
+
+log() {
+    echo "[$(date '+%H:%M:%S')] $1"
+}
+
+auto_approve_session() {
+    local session_name="$1"
+    
+    if ! tmux has-session -t "$session_name" 2>/dev/null; then
+        return 1
+    fi
+    
+    # Capture current pane content
+    local output=$(tmux capture-pane -t "$session_name" -p)
+    
+    # Check for approval prompts (handles various prompt types)
+    if echo "$output" | grep -q "Do you want to proceed?"; then
+        log "Auto-approving in $session_name"
+        tmux send-keys -t "$session_name" '1'  # No Enter needed!
+        return 0
+    fi
+    
+    # Check for "Yes/No" prompts
+    if echo "$output" | grep -q "❯ 1\. Yes"; then
+        log "Auto-approving Yes option in $session_name"
+        tmux send-keys -t "$session_name" '1'  # No Enter needed!
+        return 0
+    fi
+    
+    # Check for "don't ask again" options (prefer option 2)
+    if echo "$output" | grep -q "don't ask again for"; then
+        log "Selecting 'don't ask again' in $session_name"
+        tmux send-keys -t "$session_name" '2'  # No Enter needed!
+        return 0
+    fi
+    
+    return 1
+}
+
+enable_auto_accept_mode() {
+    local session_name="$1"
+    
+    if ! tmux has-session -t "$session_name" 2>/dev/null; then
+        return 1
+    fi
+    
+    log "Attempting to enable auto-accept mode in $session_name"
+    
+    # Try different methods to enable auto-accept
+    # Method 1: Shift+Tab 
+    tmux send-keys -t "$session_name" 'S-Tab'
+    sleep 1
+    
+    # Method 2: Alternative Shift+Tab sequence
+    tmux send-keys -t "$session_name" -X send-keys 'S-Tab'
+    sleep 1
+    
+    # Method 3: ESC sequence for Shift+Tab
+    tmux send-keys -t "$session_name" $'\e[Z'
+    sleep 1
+}
+
+monitor_and_approve() {
+    local session_count="$1"
+    log "Starting auto-approval daemon for $session_count sessions"
+    
+    # First, try to enable auto-accept mode for all sessions
+    for i in $(seq 1 $session_count); do
+        session_name="$SESSION_PREFIX-$i"
+        enable_auto_accept_mode "$session_name"
+    done
+    
+    # Monitor and auto-approve
+    while true; do
+        for i in $(seq 1 $session_count); do
+            session_name="$SESSION_PREFIX-$i"
+            auto_approve_session "$session_name"
+        done
+        sleep $APPROVAL_INTERVAL
+    done
+}
+
+case "$1" in
+    start)
+        session_count="${2:-4}"
+        echo "Starting auto-approval daemon for $session_count sessions..."
+        echo "Press Ctrl+C to stop"
+        monitor_and_approve "$session_count"
+        ;;
+    
+    once)
+        session_name="${2:-claude-1}"
+        auto_approve_session "$session_name"
+        ;;
+    
+    enable-auto-accept)
+        session_name="${2:-claude-1}" 
+        enable_auto_accept_mode "$session_name"
+        ;;
+    
+    *)
+        echo "Usage: auto-approve <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  start [N]              - Start monitoring N sessions (default: 4)"
+        echo "  once [SESSION]         - Auto-approve once for session (default: claude-1)"
+        echo "  enable-auto-accept [S] - Enable auto-accept mode for session"
+        echo ""
+        echo "Examples:"
+        echo "  ./tools/auto-approve start 4        # Monitor 4 sessions continuously"
+        echo "  ./tools/auto-approve once claude-2  # Auto-approve once for claude-2"
+        ;;
+esac

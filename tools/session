@@ -15,8 +15,9 @@ case "$1" in
         for i in $(seq 1 $count); do
             session_name="$SESSION_PREFIX-$i"
             
-            # Create tmux session
+            # Create tmux session with mouse support
             if tmux new -d -s "$session_name" 2>/dev/null; then
+                tmux set -t "$session_name" mouse on
                 echo "$session_name|$(date +%s)|idle|" >> "$SESSION_DIR/tracking"
                 echo "Started session: $session_name"
                 ((started++))
@@ -67,31 +68,56 @@ case "$1" in
     assign)
         # Assign issue to session with worktree
         session_id="$2"
-        issue="$3"
+        task_or_issue="$3"
         session_name="$SESSION_PREFIX-$session_id"
-        worktree_path="$WORKTREE_BASE/$issue"
         
-        # Intelligently choose branch name based on issue
-        if command -v gh >/dev/null 2>&1; then
-            # Get issue title and labels
-            issue_data=$(gh issue view "$issue" --json title,labels 2>/dev/null || echo '{}')
-            title=$(echo "$issue_data" | jq -r '.title // ""' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g' | cut -c1-50)
-            labels=$(echo "$issue_data" | jq -r '.labels[].name' 2>/dev/null | tr '\n' ' ')
-            
-            # Choose branch prefix based on labels/title
-            if [[ "$labels" == *"bug"* ]] || [[ "$title" == *"fix"* ]]; then
-                branch="bugfix/$issue-$title"
-            elif [[ "$labels" == *"feature"* ]] || [[ "$title" == *"add"* ]] || [[ "$title" == *"implement"* ]]; then
-                branch="feature/$issue-$title"
-            elif [[ "$labels" == *"docs"* ]] || [[ "$title" == *"document"* ]]; then
-                branch="docs/$issue-$title"
-            elif [[ "$title" == *"refactor"* ]] || [[ "$title" == *"cleanup"* ]]; then
-                branch="refactor/$issue-$title"
+        # Determine if this is a task (#47-1) or issue (#47) format
+        if [[ "$task_or_issue" =~ ^#?([0-9]+)-([0-9]+)$ ]]; then
+            # Task format detected
+            issue_num="${BASH_REMATCH[1]}"
+            task_num="${BASH_REMATCH[2]}"
+            worktree_path="$WORKTREE_BASE/task-$issue_num-$task_num"
+            is_task=true
+            issue="$task_or_issue"
+        else
+            # Regular issue format
+            issue="$task_or_issue"
+            worktree_path="$WORKTREE_BASE/$issue"
+            is_task=false
+        fi
+        
+        # Choose branch name based on task vs issue
+        if [ "$is_task" = true ]; then
+            # For tasks, get a description from the checklist
+            if command -v gh >/dev/null 2>&1; then
+                task_desc=$(./tools/github parse-checklist "$issue_num" | sed -n "${task_num}p" | cut -d'|' -f3 | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g' | cut -c1-40)
+                branch="task/$issue_num-$task_num-$task_desc"
             else
-                branch="feature/$issue-$title"  # Default to feature
+                branch="task/$issue_num-$task_num"
             fi
         else
-            branch="feature/$issue"  # Fallback if gh not available
+            # Original issue-based logic
+            if command -v gh >/dev/null 2>&1; then
+                # Get issue title and labels
+                issue_data=$(gh issue view "$issue" --json title,labels 2>/dev/null || echo '{}')
+                title=$(echo "$issue_data" | jq -r '.title // ""' | tr '[:upper:]' '[:lower:]' | tr ' ' '-' | sed 's/[^a-z0-9-]//g' | cut -c1-50)
+                labels=$(echo "$issue_data" | jq -r '.labels[].name' 2>/dev/null | tr '\n' ' ')
+                
+                # Choose branch prefix based on labels/title
+                if [[ "$labels" == *"bug"* ]] || [[ "$title" == *"fix"* ]]; then
+                    branch="bugfix/$issue-$title"
+                elif [[ "$labels" == *"feature"* ]] || [[ "$title" == *"add"* ]] || [[ "$title" == *"implement"* ]]; then
+                    branch="feature/$issue-$title"
+                elif [[ "$labels" == *"docs"* ]] || [[ "$title" == *"document"* ]]; then
+                    branch="docs/$issue-$title"
+                elif [[ "$title" == *"refactor"* ]] || [[ "$title" == *"cleanup"* ]]; then
+                    branch="refactor/$issue-$title"
+                else
+                    branch="feature/$issue-$title"  # Default to feature
+                fi
+            else
+                branch="feature/$issue"  # Fallback if gh not available
+            fi
         fi
         
         # Create worktree if needed
@@ -101,14 +127,29 @@ case "$1" in
             git worktree add "$worktree_path" "$branch" 2>/dev/null || \
             git worktree add "$worktree_path"
             
-            # Apply autonomous settings if available
+            # Apply comprehensive autonomous settings
+            mkdir -p "$worktree_path/.claude"
+            
+            # Copy main autonomous settings
+            if [ -f ".claude/settings.json" ]; then
+                cp ".claude/settings.json" "$worktree_path/.claude/settings.json"
+                echo "✓ Applied autonomous settings.json to worktree"
+            fi
+            
+            # Copy autonomous template if available
+            if [ -f ".claude/templates/settings.autonomous.json" ]; then
+                cp ".claude/templates/settings.autonomous.json" "$worktree_path/.claude/settings.local.json" 
+                echo "✓ Applied autonomous template to worktree"
+            fi
+            
+            # Add to gitignore to prevent committing settings
+            echo ".claude/settings.json" >> "$worktree_path/.gitignore"
+            echo ".claude/settings.local.json" >> "$worktree_path/.gitignore"
+            
+            # Run setup-autonomous tool if available  
             if [ -x "./tools/setup-autonomous" ]; then
                 ./tools/setup-autonomous apply "$worktree_path"
-            elif [ -f ".claude/templates/settings.worktree.json" ]; then
-                mkdir -p "$worktree_path/.claude"
-                cp ".claude/templates/settings.worktree.json" "$worktree_path/.claude/settings.local.json"
-                echo ".claude/settings.local.json" >> "$worktree_path/.gitignore"
-                echo "✓ Applied autonomous settings to worktree"
+                echo "✓ Applied setup-autonomous configurations"
             fi
         fi
         
@@ -121,12 +162,44 @@ case "$1" in
         fi
         mv "$SESSION_DIR/tracking.tmp" "$SESSION_DIR/tracking"
         
-        # Send Claude to worktree
-        tmux send -t "$session_name" "cd $(pwd)/$worktree_path" Enter
+        # Send Claude to worktree with proper escaping and PATH
+        tmux send -t "$session_name" "cd '$(pwd)/$worktree_path'" Enter
+        tmux send -t "$session_name" "export PATH=/opt/homebrew/bin:\$PATH" Enter
+        tmux send -t "$session_name" "setopt nocorrect" Enter  # Disable zsh corrections
+        
+        # Send task work command with PR creation instruction
         if [ "$is_task" = true ]; then
-            tmux send -t "$session_name" "claude /work-on #$issue_num-$task_num" Enter
+            # Create a comprehensive instruction for the task
+            cat > "$worktree_path/.claude/TASK_INSTRUCTIONS.md" << EOF
+# Task Instructions for #$issue_num-$task_num
+
+1. Complete the assigned task #$issue_num-$task_num
+2. After completing the work:
+   - Stage and commit all changes
+   - Create a PR that includes "Updates #$issue_num" in the body
+   - This will automatically update the checklist when merged
+   
+Example PR command:
+\`\`\`bash
+gh pr create \\
+  --title "Complete task #$issue_num-$task_num: [description]" \\
+  --body "## Summary
+[Your changes]
+
+## Issue Update
+Updates #$issue_num by completing:
+- [x] [Task description from checklist]
+
+🤖 Generated with [Claude Code](https://claude.ai/code)"
+\`\`\`
+
+3. After PR is created, mark yourself as idle for the next task
+
+IMPORTANT: Use "Updates #$issue_num" not "Fixes" to avoid closing the parent issue!
+EOF
+            tmux send -t "$session_name" "claude '/work-on #$issue_num-$task_num && after completing the task, create a pull request that updates issue #$issue_num checklist'" Enter
         else
-            tmux send -t "$session_name" "claude /work-on $issue" Enter
+            tmux send -t "$session_name" "claude '/work-on $issue && create a pull request when done'" Enter
         fi
         
         if [ "$is_task" = true ]; then

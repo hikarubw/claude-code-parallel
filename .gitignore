@@ -29,3 +29,4 @@ node_modules/
 # Test artifacts
 coverage/
 .nyc_output/.worktrees/
+.worktrees/

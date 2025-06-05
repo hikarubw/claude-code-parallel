@@ -2,7 +2,7 @@
 
 Based on the code review, here are specific enhancements to better leverage Claude Code features:
 
-## 🎯 Quick Wins (v2.1.0)
+## 🎯 Quick Wins (v3.0)
 
 ### 1. Extended Thinking Integration
 **File**: `commands/setup.md`

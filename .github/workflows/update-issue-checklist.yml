@@ -1,0 +1,126 @@
+name: Update Issue Checklist on PR Merge
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  update-checklist:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const prTitle = context.payload.pull_request.title;
+            const prBody = context.payload.pull_request.body;
+            const prBranch = context.payload.pull_request.head.ref;
+            
+            console.log(`Processing PR: ${prTitle}`);
+            console.log(`Branch: ${prBranch}`);
+            
+            // Extract task ID from multiple sources
+            let taskMatch = null;
+            let issueNum = null;
+            let taskNum = null;
+            
+            // Method 1: From PR title (e.g., "Complete task #1-5: Description")
+            taskMatch = prTitle.match(/#(\d+)-(\d+)/);
+            if (!taskMatch) {
+              // Method 2: From branch name (e.g., "task/1-5-description")
+              taskMatch = prBranch.match(/task\/(\d+)-(\d+)/);
+            }
+            if (!taskMatch) {
+              // Method 3: From PR body
+              taskMatch = prBody.match(/[Tt]ask #(\d+)-(\d+)/);
+            }
+            
+            if (taskMatch) {
+              issueNum = parseInt(taskMatch[1]);
+              taskNum = parseInt(taskMatch[2]);
+              console.log(`Found task #${issueNum}-${taskNum}`);
+            } else {
+              console.log('No task ID found in PR');
+              return;
+            }
+            
+            // Also check for "Updates #X" pattern to ensure we have the right issue
+            const updatesMatch = prBody.match(/[Uu]pdates #(\d+)/);
+            if (updatesMatch && parseInt(updatesMatch[1]) !== issueNum) {
+              console.log(`Warning: Task ${issueNum}-${taskNum} but Updates #${updatesMatch[1]}`);
+              issueNum = parseInt(updatesMatch[1]);
+            }
+            
+            try {
+              // Get the issue
+              const issue = await github.rest.issues.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNum
+              });
+              
+              let body = issue.data.body;
+              console.log(`Original issue body length: ${body.length}`);
+              
+              // Method 1: Update by task number position
+              // Split by lines and find the nth checkbox
+              const lines = body.split('\n');
+              let checkboxCount = 0;
+              let updated = false;
+              
+              for (let i = 0; i < lines.length; i++) {
+                if (lines[i].match(/^\s*-\s*\[\s*\]/)) {
+                  checkboxCount++;
+                  if (checkboxCount === taskNum) {
+                    // Update this checkbox
+                    lines[i] = lines[i].replace(/\[\s*\]/, '[x]');
+                    updated = true;
+                    console.log(`Updated checkbox ${taskNum}: ${lines[i]}`);
+                    break;
+                  }
+                }
+              }
+              
+              if (!updated) {
+                // Method 2: Try to match by content from PR title
+                const taskDescription = prTitle.replace(/^.*?#\d+-\d+:\s*/, '');
+                console.log(`Trying to match by description: ${taskDescription}`);
+                
+                for (let i = 0; i < lines.length; i++) {
+                  if (lines[i].match(/^\s*-\s*\[\s*\]/) && 
+                      lines[i].toLowerCase().includes(taskDescription.toLowerCase().substring(0, 20))) {
+                    lines[i] = lines[i].replace(/\[\s*\]/, '[x]');
+                    updated = true;
+                    console.log(`Updated by description match: ${lines[i]}`);
+                    break;
+                  }
+                }
+              }
+              
+              if (updated) {
+                const newBody = lines.join('\n');
+                
+                // Update the issue
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNum,
+                  body: newBody
+                });
+                
+                console.log(`✓ Updated issue #${issueNum}, task ${taskNum} marked as complete`);
+                
+                // Add a comment to the issue
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: issueNum,
+                  body: `✅ Task #${issueNum}-${taskNum} completed via PR #${context.payload.pull_request.number}`
+                });
+              } else {
+                console.log(`Could not find checkbox to update for task ${taskNum}`);
+              }
+              
+            } catch (error) {
+              console.error(`Error updating issue: ${error.message}`);
+              throw error;
+            }
