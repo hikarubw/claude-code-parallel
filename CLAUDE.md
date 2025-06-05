@@ -32,11 +32,32 @@ User Issues → Claude Analysis → Subissue Queue → Worker Pool → PRs → A
 
 ## 🛠️ Development Guidelines
 
+### Critical: CLAUDE.md as Project Memory
+**This file is the persistent "mind" of the project**. Since Claude cannot remember between sessions, CLAUDE.md serves as the memory. Always update this file with:
+- Architecture changes
+- Important decisions
+- New features or commands
+- Experimental findings
+- Version updates
+
+### Architecture Decision Records (ADR)
+When making architecture changes or redesigns:
+1. Create ADR in `docs/ADR-XXX-title.md` format
+2. Document: Context, Decision, Consequences, Alternatives
+3. Link to ADR from CLAUDE.md
+4. Keep ADRs even if decisions are reversed (shows evolution)
+
+**Important**: ADRs are essential history - NEVER delete them. They can be moved to archives but must be preserved. While other files can be cleaned/reorganized aggressively, ADRs document the "why" of our journey.
+
+Current ADRs:
+- `docs/archive/proposals/ADR-001-SUBISSUE-WORKER-ARCHITECTURE.md` - v0.3.0 architecture
+
 ### When Working on This Project
 1. **Maintain Simplicity** - The power is in simplicity, not complexity
 2. **User-First Design** - Users should only need to provide issue numbers
 3. **Leverage Claude Intelligence** - Let AI handle the complexity
 4. **Preserve Safety** - All changes go through PR review
+5. **Update CLAUDE.md** - "Keep in mind" = "Keep in CLAUDE.md"
 
 ### Code Organization
 ```
