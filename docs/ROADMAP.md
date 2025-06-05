@@ -1,6 +1,6 @@
 # Claude Code Tools - Development Roadmap
 
-## Current State (v3.0.0)
+## Current State (v0.3.0-experimental)
 - ✅ **Subissue-Based Worker Pool Architecture**
 - ✅ Intelligent issue analysis with Claude
 - ✅ Priority queue management
@@ -27,7 +27,7 @@
 - Complex ID system (#47-1)
 - Manual task creation
 
-### v3.0 (Current) - Subissue-Based
+### v0.3.0 (Current) - Subissue-Based (Experimental)
 - Automatic issue decomposition
 - Worker pool pattern
 - Priority queue system
@@ -35,7 +35,7 @@
 
 ## Future Directions
 
-### Near Term (v3.1.0) - Enhanced Intelligence
+### Near Term (v0.4.0) - Enhanced Intelligence
 - **Smarter Issue Analysis**
   - Learn from successful patterns
   - Optimize subissue sizing
@@ -51,7 +51,7 @@
   - Worker efficiency tracking
   - Bottleneck identification
 
-### Medium Term (v3.2.0) - Scale & Integration
+### Medium Term (v0.5.0) - Scale & Integration
 - **Distributed Workers**
   - Run workers on multiple machines
   - Central queue server
@@ -67,7 +67,7 @@
   - Team dashboards
   - Work attribution
 
-### Long Term (v4.0.0) - AI-Native Development
+### Long Term (v1.0.0) - Production Ready
 - **Predictive Development**
   - Suggest issues from codebase analysis
   - Proactive technical debt identification

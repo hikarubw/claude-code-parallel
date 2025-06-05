@@ -1,4 +1,6 @@
-# 🚀 Claude Code Tools - Parallel Development Made Simple
+# 🚀 Claude Code Tools - Parallel Development Made Simple (Experimental)
+
+> ⚠️ **EXPERIMENTAL**: v0.3.0 - Architecture and APIs are subject to change
 
 > Transform single-threaded development into massively parallel workflows using Claude Code's intelligence
 
