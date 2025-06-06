@@ -1,32 +1,17 @@
 #!/bin/bash
-# Process subissue wrapper for Pueue
-# This is called by Pueue to process a subissue task
-# Since Pueue runs tasks in the background, this just marks completion
-# The actual work is done by hybrid-worker in tmux panes
+# Process subissue - This is called by Pueue tasks
+# It's a placeholder that marks the task for hybrid-worker to pick up
 
-set -e
+SUBISSUE_ID="$1"
+PARENT_ISSUE="$2"
 
-# Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# This script is just a placeholder
+# The actual work is done by hybrid-worker which polls Pueue
+# and runs Claude in a visible tmux pane
 
-SUBISSUE_ID=$1
+echo "Subissue #$SUBISSUE_ID (parent: #$PARENT_ISSUE) queued for processing"
+echo "A hybrid-worker will pick this up and run Claude"
 
-if [ -z "$SUBISSUE_ID" ]; then
-    echo "Error: No subissue ID provided"
-    exit 1
-fi
-
-echo "Process subissue wrapper called for subissue $SUBISSUE_ID"
-echo "Note: Actual processing happens in hybrid-worker tmux panes"
-echo "This wrapper exists to satisfy Pueue's command requirement"
-
-# The hybrid-worker will:
-# 1. Poll Pueue for this task
-# 2. Mark it as started in Pueue
-# 3. Process it in a visible tmux pane
-# 4. Update both queues when complete
-
-# This script just exits successfully so Pueue knows the command exists
-# The real magic happens in the hybrid-worker polling loop
-exit 0
+# Keep the task "running" so hybrid-worker can find it
+# The worker will mark it as complete/failed
+sleep 86400  # Sleep for 24 hours (will be killed by worker)

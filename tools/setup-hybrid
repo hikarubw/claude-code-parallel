@@ -126,13 +126,11 @@ start_pueue() {
         fi
     fi
     
+    # Get the directory of this script
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    
     # Initialize subissues group
-    if "$SCRIPT_DIR/queue-pueue" init; then
-        echo -e "${GREEN}✓ Pueue group initialized${NC}"
-    else
-        echo -e "${RED}Error: Failed to initialize Pueue group${NC}"
-        exit 1
-    fi
+    "$SCRIPT_DIR/pueue-wrapper" init
 }
 
 # Create hybrid worker session
@@ -145,12 +143,7 @@ create_worker_session() {
     tmux kill-session -t claude-workers 2>/dev/null || true
     
     # Create new session with grid layout
-    if "$SCRIPT_DIR/grid-manager" create $workers; then
-        echo -e "${GREEN}✓ Tmux session created${NC}"
-    else
-        echo -e "${RED}Error: Failed to create tmux session${NC}"
-        exit 1
-    fi
+    "$SCRIPT_DIR/grid-manager" create $workers
     
     # Update each worker pane to run hybrid-worker
     for i in $(seq 1 $workers); do
@@ -163,7 +156,7 @@ create_worker_session() {
     # Update monitor pane
     tmux send-keys -t "claude-workers:0.0" C-c 2>/dev/null || true
     sleep 0.5
-    tmux send-keys -t "claude-workers:0.0" "$SCRIPT_DIR/queue-pueue monitor" C-m
+    tmux send-keys -t "claude-workers:0.0" "$SCRIPT_DIR/pueue-wrapper monitor" C-m
     
     echo -e "${GREEN}✓ Hybrid worker session created${NC}"
 }
@@ -172,20 +165,8 @@ create_worker_session() {
 migrate_queue() {
     echo "Migrating existing queue to hybrid architecture..."
     
-    # Ensure queue directory exists
-    mkdir -p "$HOME/.claude/queue"
-    
-    if [ -f "$HOME/.claude/queue/queue.txt" ]; then
-        if "$SCRIPT_DIR/queue-pueue" migrate; then
-            echo -e "${GREEN}✓ Queue migrated successfully${NC}"
-        else
-            echo -e "${YELLOW}Warning: Queue migration had issues, but continuing...${NC}"
-        fi
-    else
-        echo "No existing queue found, creating empty queue..."
-        touch "$HOME/.claude/queue/queue.txt"
-        echo -e "${GREEN}✓ Empty queue created${NC}"
-    fi
+    # Migration is no longer needed with pure Pueue backend
+    echo "Using pure Pueue backend - no migration needed"
 }
 
 # Setup auto-approval for hybrid
@@ -208,13 +189,9 @@ create_demo() {
     echo -e "${BLUE}Creating demo subissues...${NC}"
     
     # Add some test subissues
-    if "$SCRIPT_DIR/queue-pueue" add 1 "123" "301" && \
-       "$SCRIPT_DIR/queue-pueue" add 2 "123" "302" && \
-       "$SCRIPT_DIR/queue-pueue" add 3 "124" "303"; then
-        echo -e "${GREEN}✓ Demo subissues added successfully${NC}"
-    else
-        echo -e "${YELLOW}Warning: Some demo subissues may not have been added${NC}"
-    fi
+    "$SCRIPT_DIR/pueue-wrapper" add 1 "123" "301"
+    "$SCRIPT_DIR/pueue-wrapper" add 2 "123" "302"
+    "$SCRIPT_DIR/pueue-wrapper" add 3 "124" "303"
     
     echo -e "${GREEN}✓ Demo subissues added to hybrid queue${NC}"
 }
@@ -228,10 +205,10 @@ ${BLUE}Hybrid Architecture Quick Start:${NC}
    tmux attach -t claude-workers
 
 2. Add subissues:
-   ./tools/queue-pueue add <priority> <parent> <subissue>
+   ./tools/pueue-wrapper add <priority> <parent> <subissue>
 
 3. Monitor status:
-   ./tools/queue-pueue monitor
+   ./tools/pueue-wrapper monitor
 
 4. View Pueue status:
    pueue status --group subissues

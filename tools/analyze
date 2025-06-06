@@ -117,10 +117,17 @@ queue_subissues() {
         return 1
     fi
     
-    # Add each subissue to queue
+    # Get the directory of this script
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PUEUE_WRAPPER="$SCRIPT_DIR/pueue-wrapper"
+    
+    # Initialize Pueue if needed
+    "$PUEUE_WRAPPER" init >/dev/null 2>&1
+    
+    # Add each subissue to queue using Pueue wrapper
     local count=0
     for subissue in $subissues; do
-        $HOME/Documents/repo/claude-code-tools/tools/queue add "$priority" "$parent_issue" "$subissue"
+        "$PUEUE_WRAPPER" add "$priority" "$parent_issue" "$subissue"
         ((count++))
     done
     

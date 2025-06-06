@@ -26,10 +26,13 @@ wait_with_progress() {
     echo " Done!"
 }
 
+# Get the directory of this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Setup hybrid if not already running
 if ! tmux has-session -t claude-workers 2>/dev/null; then
     echo -e "${YELLOW}Setting up hybrid architecture...${NC}"
-    ./tools/setup-hybrid 4
+    "$SCRIPT_DIR/setup-hybrid" 4
     wait_with_progress 3 "Waiting for workers to start"
 fi
 
@@ -38,9 +41,9 @@ echo -e "${GREEN}=== Demo 1: Basic Queue Operations ===${NC}"
 
 # Add some tasks
 echo "Adding tasks with different priorities..."
-./tools/queue-pueue add 1 "123" "401"  # High priority
-./tools/queue-pueue add 3 "123" "402"  # Low priority  
-./tools/queue-pueue add 2 "124" "403"  # Medium priority
+"$SCRIPT_DIR/pueue-wrapper" add 1 "123" "401"  # High priority
+"$SCRIPT_DIR/pueue-wrapper" add 3 "123" "402"  # Low priority  
+"$SCRIPT_DIR/pueue-wrapper" add 2 "124" "403"  # Medium priority
 
 echo -e "${GREEN}✓ Added 3 tasks with different priorities${NC}"
 
@@ -87,7 +90,7 @@ echo "Workers are running in tmux panes where you can see Claude working!"
 echo
 echo -e "${MAGENTA}Key Commands:${NC}"
 echo "  View workers:     tmux attach -t claude-workers"
-echo "  Monitor status:   ./tools/queue-pueue monitor"
+echo "  Monitor status:   ./tools/pueue-wrapper monitor"
 echo "  Pueue status:     pueue status --group subissues"
 echo "  Follow a task:    pueue follow <task-id>"
 echo "  Pause workers:    pueue pause --group subissues"
@@ -105,8 +108,8 @@ echo -e "${GREEN}✓ Task scheduled for delayed execution${NC}"
 echo
 echo -e "${BLUE}=== Current System Status ===${NC}"
 echo
-echo "File Queue:"
-~/Documents/repo/claude-code-tools/tools/queue status | head -10
+echo "Queue Status:"
+"$SCRIPT_DIR/pueue-wrapper" status | head -10
 echo
 echo "Pueue Tasks:"
 pueue status --group subissues | grep -E "(Task|subissue)" | head -10
@@ -119,6 +122,5 @@ echo "  tmux attach -t claude-workers"
 echo
 echo -e "${YELLOW}To add real work:${NC}"
 echo "  ./tools/analyze 123  # Analyze issue #123"
-echo "  ./tools/queue-pueue sync  # Sync to Pueue"
 echo
 echo "The hybrid architecture combines the best of both worlds!"
