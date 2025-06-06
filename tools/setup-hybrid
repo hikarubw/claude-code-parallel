@@ -4,6 +4,10 @@
 
 set -e
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 # Colors
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -18,12 +22,15 @@ echo
 # Check dependencies
 check_dependencies() {
     echo "Checking dependencies..."
+    local failed=false
     
     # Check tmux
     if ! command -v tmux &> /dev/null; then
         echo -e "${RED}Error: tmux not installed${NC}"
         echo "Install with: brew install tmux"
-        exit 1
+        failed=true
+    else
+        echo -e "${GREEN}✓ tmux found: $(tmux -V)${NC}"
     fi
     
     # Check Pueue
@@ -31,25 +38,71 @@ check_dependencies() {
         echo -e "${YELLOW}Pueue not installed. Installing...${NC}"
         
         if command -v brew &> /dev/null; then
-            brew install pueue
+            if brew install pueue; then
+                echo -e "${GREEN}✓ Pueue installed successfully${NC}"
+            else
+                echo -e "${RED}Error: Failed to install Pueue${NC}"
+                failed=true
+            fi
         elif command -v cargo &> /dev/null; then
-            cargo install pueue
+            if cargo install pueue; then
+                echo -e "${GREEN}✓ Pueue installed successfully${NC}"
+            else
+                echo -e "${RED}Error: Failed to install Pueue${NC}"
+                failed=true
+            fi
         else
-            echo -e "${RED}Error: Cannot install Pueue. Install manually:${NC}"
-            echo "  brew install pueue"
-            echo "  OR"
-            echo "  cargo install pueue"
-            exit 1
+            echo -e "${RED}Error: Cannot automatically install Pueue${NC}"
+            echo -e "${YELLOW}Neither Homebrew nor Cargo package manager found.${NC}"
+            echo ""
+            echo "Please install Pueue manually using one of:"
+            echo -e "  ${GREEN}brew install pueue${NC}     (if you have Homebrew)"
+            echo -e "  ${GREEN}cargo install pueue${NC}    (if you have Rust/Cargo)"
+            echo -e "  ${GREEN}Download from: https://github.com/Nukesor/pueue/releases${NC}"
+            failed=true
         fi
+    else
+        echo -e "${GREEN}✓ pueue found: $(pueue --version)${NC}"
     fi
     
     # Check jq
     if ! command -v jq &> /dev/null; then
         echo -e "${YELLOW}jq not installed. Installing...${NC}"
-        brew install jq || {
+        if brew install jq; then
+            echo -e "${GREEN}✓ jq installed successfully${NC}"
+        else
             echo -e "${RED}Error: Failed to install jq${NC}"
-            exit 1
-        }
+            echo "Install manually with: brew install jq"
+            failed=true
+        fi
+    else
+        echo -e "${GREEN}✓ jq found: $(jq --version)${NC}"
+    fi
+    
+    # Check git
+    if ! command -v git &> /dev/null; then
+        echo -e "${RED}Error: git not installed${NC}"
+        failed=true
+    else
+        echo -e "${GREEN}✓ git found: $(git --version | head -n1)${NC}"
+    fi
+    
+    # Check if we're in a git repository
+    if ! git rev-parse --git-dir > /dev/null 2>&1; then
+        echo -e "${RED}Error: Not in a git repository${NC}"
+        echo -e "${YELLOW}This tool needs to be run from within a git repository.${NC}"
+        echo ""
+        echo "Please either:"
+        echo "  1. Navigate to your project directory: cd /path/to/your/project"
+        echo "  2. Initialize a git repository: git init"
+        failed=true
+    else
+        echo -e "${GREEN}✓ In git repository: $(basename $(git rev-parse --show-toplevel))${NC}"
+    fi
+    
+    if [ "$failed" = true ]; then
+        echo -e "${RED}\nDependency check failed. Please install missing dependencies.${NC}"
+        exit 1
     fi
     
     echo -e "${GREEN}✓ All dependencies satisfied${NC}"
@@ -74,7 +127,12 @@ start_pueue() {
     fi
     
     # Initialize subissues group
-    ~/Documents/repo/claude-code-tools/tools/queue-pueue init
+    if "$SCRIPT_DIR/queue-pueue" init; then
+        echo -e "${GREEN}✓ Pueue group initialized${NC}"
+    else
+        echo -e "${RED}Error: Failed to initialize Pueue group${NC}"
+        exit 1
+    fi
 }
 
 # Create hybrid worker session
@@ -87,20 +145,25 @@ create_worker_session() {
     tmux kill-session -t claude-workers 2>/dev/null || true
     
     # Create new session with grid layout
-    ~/Documents/repo/claude-code-tools/tools/grid-manager create $workers
+    if "$SCRIPT_DIR/grid-manager" create $workers; then
+        echo -e "${GREEN}✓ Tmux session created${NC}"
+    else
+        echo -e "${RED}Error: Failed to create tmux session${NC}"
+        exit 1
+    fi
     
     # Update each worker pane to run hybrid-worker
     for i in $(seq 1 $workers); do
         tmux send-keys -t "claude-workers:0.$i" C-c 2>/dev/null || true
         sleep 0.5
         tmux send-keys -t "claude-workers:0.$i" "clear" C-m
-        tmux send-keys -t "claude-workers:0.$i" "~/Documents/repo/claude-code-tools/tools/hybrid-worker $i" C-m
+        tmux send-keys -t "claude-workers:0.$i" "$SCRIPT_DIR/hybrid-worker $i" C-m
     done
     
     # Update monitor pane
     tmux send-keys -t "claude-workers:0.0" C-c 2>/dev/null || true
     sleep 0.5
-    tmux send-keys -t "claude-workers:0.0" "~/Documents/repo/claude-code-tools/tools/queue-pueue monitor" C-m
+    tmux send-keys -t "claude-workers:0.0" "$SCRIPT_DIR/queue-pueue monitor" C-m
     
     echo -e "${GREEN}✓ Hybrid worker session created${NC}"
 }
@@ -109,11 +172,19 @@ create_worker_session() {
 migrate_queue() {
     echo "Migrating existing queue to hybrid architecture..."
     
+    # Ensure queue directory exists
+    mkdir -p "$HOME/.claude/queue"
+    
     if [ -f "$HOME/.claude/queue/queue.txt" ]; then
-        ~/Documents/repo/claude-code-tools/tools/queue-pueue migrate
-        echo -e "${GREEN}✓ Queue migrated successfully${NC}"
+        if "$SCRIPT_DIR/queue-pueue" migrate; then
+            echo -e "${GREEN}✓ Queue migrated successfully${NC}"
+        else
+            echo -e "${YELLOW}Warning: Queue migration had issues, but continuing...${NC}"
+        fi
     else
-        echo "No existing queue found, skipping migration"
+        echo "No existing queue found, creating empty queue..."
+        touch "$HOME/.claude/queue/queue.txt"
+        echo -e "${GREEN}✓ Empty queue created${NC}"
     fi
 }
 
@@ -137,9 +208,13 @@ create_demo() {
     echo -e "${BLUE}Creating demo subissues...${NC}"
     
     # Add some test subissues
-    ~/Documents/repo/claude-code-tools/tools/queue-pueue add 1 "123" "301"
-    ~/Documents/repo/claude-code-tools/tools/queue-pueue add 2 "123" "302"
-    ~/Documents/repo/claude-code-tools/tools/queue-pueue add 3 "124" "303"
+    if "$SCRIPT_DIR/queue-pueue" add 1 "123" "301" && \
+       "$SCRIPT_DIR/queue-pueue" add 2 "123" "302" && \
+       "$SCRIPT_DIR/queue-pueue" add 3 "124" "303"; then
+        echo -e "${GREEN}✓ Demo subissues added successfully${NC}"
+    else
+        echo -e "${YELLOW}Warning: Some demo subissues may not have been added${NC}"
+    fi
     
     echo -e "${GREEN}✓ Demo subissues added to hybrid queue${NC}"
 }
@@ -192,6 +267,22 @@ main() {
     
     echo
     echo -e "${GREEN}=== Hybrid Architecture Setup Complete! ===${NC}"
+    echo
+    
+    # Final verification
+    echo "Verifying setup..."
+    if tmux has-session -t claude-workers 2>/dev/null; then
+        echo -e "${GREEN}✓ Tmux session 'claude-workers' is active${NC}"
+    else
+        echo -e "${YELLOW}⚠ Warning: Tmux session may not be fully initialized${NC}"
+    fi
+    
+    if pueue status --group subissues &>/dev/null; then
+        echo -e "${GREEN}✓ Pueue group 'subissues' is ready${NC}"
+    else
+        echo -e "${YELLOW}⚠ Warning: Pueue group may not be fully initialized${NC}"
+    fi
+    
     echo
     show_usage
     
