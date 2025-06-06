@@ -2,6 +2,10 @@
 # Hybrid worker - Revolutionary Pueue + Tmux architecture
 # This runs INSIDE a tmux pane, polls Pueue, but executes Claude visibly
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 WORKER_ID=${1:-1}
 WORKER_NAME="worker-$WORKER_ID"
 SESSION="claude-workers"
@@ -15,7 +19,13 @@ NC='\033[0m'
 
 # Ensure Pueue daemon is running
 if ! pueue status &>/dev/null; then
-    echo -e "${RED}Error: Pueue daemon not running. Start with: pueued -d${NC}"
+    echo -e "${RED}Error: Pueue daemon not running${NC}"
+    echo -e "${YELLOW}This is likely because Pueue was just installed or the daemon crashed.${NC}"
+    echo ""
+    echo "To fix this, run:"
+    echo -e "  ${GREEN}pueued -d${NC}  (to start the daemon in background)"
+    echo ""
+    echo "Then restart this worker."
     exit 1
 fi
 
@@ -52,7 +62,7 @@ while true; do
     pueue start $TASK_ID
     
     # Get subissue details from our queue
-    QUEUE_ITEM=$(~/Documents/repo/claude-code-tools/tools/queue get "subissue-$SUBISSUE_ID")
+    QUEUE_ITEM=$("$SCRIPT_DIR/queue" get "subissue-$SUBISSUE_ID")
     if [[ -z "$QUEUE_ITEM" ]]; then
         echo -e "${RED}Error: Subissue $SUBISSUE_ID not found in queue${NC}"
         pueue kill $TASK_ID
@@ -77,7 +87,7 @@ while true; do
         git worktree add "$WORKTREE_PATH" -b "$BRANCH_NAME" || {
             echo -e "${RED}Failed to create worktree${NC}"
             pueue kill $TASK_ID
-            ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" status failed
+            "$SCRIPT_DIR/queue" update "subissue-$SUBISSUE_ID" status failed
             continue
         }
     fi
@@ -89,8 +99,8 @@ while true; do
     echo -e "${GREEN}Starting Claude in visible tmux pane...${NC}"
     
     # Update queue status
-    ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" status working
-    ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" assigned_to "$WORKER_NAME"
+    "$SCRIPT_DIR/queue" update "subissue-$SUBISSUE_ID" status working
+    "$SCRIPT_DIR/queue" update "subissue-$SUBISSUE_ID" assigned_to "$WORKER_NAME"
     
     # Run Claude with work instruction - THIS IS VISIBLE IN TMUX!
     claude "/work-on subissue #$SUBISSUE_ID of parent issue #$PARENT_ISSUE && create a pull request when done"
@@ -100,13 +110,13 @@ while true; do
         echo -e "${GREEN}PR created successfully!${NC}"
         
         # Update queue
-        ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" status completed
+        "$SCRIPT_DIR/queue" update "subissue-$SUBISSUE_ID" status completed
         
         # Mark Pueue task as successful
         pueue success $TASK_ID
     else
         echo -e "${YELLOW}No PR found, marking as needs review${NC}"
-        ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" status review
+        "$SCRIPT_DIR/queue" update "subissue-$SUBISSUE_ID" status review
         
         # Mark Pueue task as failed
         pueue kill $TASK_ID

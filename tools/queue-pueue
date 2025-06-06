@@ -4,15 +4,28 @@
 
 set -e
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 QUEUE_FILE="$HOME/.claude/queue/queue.txt"
 PUEUE_GROUP="subissues"
 
 # Ensure Pueue group exists
 ensure_pueue_group() {
-    if ! pueue group | grep -q "^$PUEUE_GROUP"; then
-        pueue group add "$PUEUE_GROUP"
-        pueue parallel 8 --group "$PUEUE_GROUP"  # Allow 8 parallel workers
-        echo "Created Pueue group: $PUEUE_GROUP"
+    # Check if group exists using a more reliable method
+    if ! pueue group 2>/dev/null | grep -q "^$PUEUE_GROUP"; then
+        # Try to add the group, ignore error if it already exists
+        if pueue group add "$PUEUE_GROUP" 2>&1 | grep -q "already exists"; then
+            echo "Pueue group '$PUEUE_GROUP' already exists"
+        else
+            echo "Created Pueue group: $PUEUE_GROUP"
+        fi
+        
+        # Set parallel limit (this is idempotent)
+        pueue parallel 8 --group "$PUEUE_GROUP" 2>/dev/null || true
+    else
+        echo "Pueue group '$PUEUE_GROUP' already configured"
     fi
 }
 
@@ -40,7 +53,7 @@ sync_to_pueue() {
                     --label "$label" \
                     --group "$PUEUE_GROUP" \
                     --priority $((10 - priority)) \
-                    "process_subissue $subissue"
+                    "$SCRIPT_DIR/hybrid-worker $subissue"
                     
                 echo "Added $label to Pueue (priority: $priority)"
             fi
@@ -62,13 +75,13 @@ sync_from_pueue() {
         
         case "$status" in
             "Running")
-                ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$subissue_id" status working
+                "$SCRIPT_DIR/queue" update "subissue-$subissue_id" status working
                 ;;
             "Success")
-                ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$subissue_id" status completed
+                "$SCRIPT_DIR/queue" update "subissue-$subissue_id" status completed
                 ;;
             "Failed"|"Killed")
-                ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$subissue_id" status failed
+                "$SCRIPT_DIR/queue" update "subissue-$subissue_id" status failed
                 ;;
         esac
     done
@@ -81,7 +94,7 @@ add_subissue() {
     local subissue=$3
     
     # Add to our file queue first
-    ~/Documents/repo/claude-code-tools/tools/queue add "$priority" "$parent" "$subissue"
+    "$SCRIPT_DIR/queue" add "$priority" "$parent" "$subissue"
     
     # Add to Pueue
     ensure_pueue_group
@@ -89,7 +102,7 @@ add_subissue() {
         --label "subissue-$subissue" \
         --group "$PUEUE_GROUP" \
         --priority $((10 - priority)) \
-        "process_subissue $subissue"
+        "$SCRIPT_DIR/hybrid-worker $subissue"
         
     echo "Added subissue $subissue to both queues"
 }
@@ -107,7 +120,7 @@ monitor() {
         
         echo
         echo "File Queue Status:"
-        ~/Documents/repo/claude-code-tools/tools/queue status
+        "$SCRIPT_DIR/queue" status
         
         echo
         echo "Workers in Tmux:"
@@ -123,7 +136,7 @@ clean() {
     pueue clean --group "$PUEUE_GROUP"
     
     echo "Cleaning completed items from file queue..."
-    ~/Documents/repo/claude-code-tools/tools/queue clean
+    "$SCRIPT_DIR/queue" clean
 }
 
 # Main command handling

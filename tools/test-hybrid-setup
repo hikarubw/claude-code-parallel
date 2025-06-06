@@ -1,0 +1,85 @@
+#!/bin/bash
+# Quick test script to verify hybrid setup
+
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}=== Testing Hybrid Architecture Setup ===${NC}"
+echo
+
+# Test 1: Check if Pueue daemon is running
+echo "Test 1: Checking Pueue daemon..."
+if pueue status &>/dev/null; then
+    echo -e "${GREEN}✓ Pueue daemon is running${NC}"
+else
+    echo -e "${RED}✗ Pueue daemon not running${NC}"
+    echo "  Run: pueued -d"
+    exit 1
+fi
+
+# Test 2: Check if subissues group exists
+echo "Test 2: Checking Pueue group..."
+if pueue group 2>/dev/null | grep -q "^subissues"; then
+    echo -e "${GREEN}✓ Pueue group 'subissues' exists${NC}"
+else
+    echo -e "${YELLOW}⚠ Pueue group 'subissues' not found, creating...${NC}"
+    "$SCRIPT_DIR/queue-pueue" init
+fi
+
+# Test 3: Check tmux session
+echo "Test 3: Checking tmux session..."
+if tmux has-session -t claude-workers 2>/dev/null; then
+    echo -e "${GREEN}✓ Tmux session 'claude-workers' exists${NC}"
+    pane_count=$(tmux list-panes -t claude-workers | wc -l)
+    echo "  Found $pane_count panes"
+else
+    echo -e "${YELLOW}⚠ No tmux session found${NC}"
+fi
+
+# Test 4: Check queue files
+echo "Test 4: Checking queue files..."
+if [ -f "$HOME/.claude/queue/queue.txt" ]; then
+    echo -e "${GREEN}✓ Queue file exists${NC}"
+    queue_items=$(wc -l < "$HOME/.claude/queue/queue.txt")
+    echo "  Queue has $queue_items items"
+else
+    echo -e "${YELLOW}⚠ Queue file not found${NC}"
+fi
+
+# Test 5: Test adding an item
+echo "Test 5: Testing queue operations..."
+test_id="test-$$"
+if "$SCRIPT_DIR/queue-pueue" add 5 "999" "$test_id" >/dev/null 2>&1; then
+    echo -e "${GREEN}✓ Successfully added test item${NC}"
+    
+    # Check if it's in Pueue
+    if pueue status --json | jq -e ".tasks | to_entries[] | select(.value.label == \"subissue-$test_id\")" >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ Test item found in Pueue${NC}"
+        
+        # Clean up
+        task_id=$(pueue status --json | jq -r --arg label "subissue-$test_id" '.tasks | to_entries[] | select(.value.label == $label) | .key')
+        pueue remove "$task_id" 2>/dev/null || true
+    else
+        echo -e "${YELLOW}⚠ Test item not found in Pueue${NC}"
+    fi
+    
+    # Clean up from file queue
+    "$SCRIPT_DIR/queue" remove "subissue-$test_id" 2>/dev/null || true
+else
+    echo -e "${RED}✗ Failed to add test item${NC}"
+fi
+
+echo
+echo -e "${BLUE}=== Test Summary ===${NC}"
+echo "If all tests passed, the hybrid architecture is ready to use!"
+echo "If there were warnings, run: ./tools/setup-hybrid"

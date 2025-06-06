@@ -1,6 +1,10 @@
 #!/bin/bash
 # Grid manager prototype - Dynamic tmux pane layout for single session
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
 SESSION="claude-workers"
 MONITOR_WIDTH=50  # Width of monitor pane in columns
 
@@ -26,12 +30,12 @@ create_grid() {
     tmux set -t "$SESSION" mouse on
     
     # Start monitor in first pane
-    tmux send-keys -t "$SESSION:0.0" './tools/monitoring-pane.sh' C-m
+    tmux send-keys -t "$SESSION:0.0" "$SCRIPT_DIR/queue-pueue monitor" C-m
     
     # Create worker panes
     for i in $(seq 1 $workers); do
         tmux split-window -t "$SESSION" -h
-        tmux send-keys -t "$SESSION:0.$i" "./tools/worker-loop.sh $i" C-m
+        tmux send-keys -t "$SESSION:0.$i" "$SCRIPT_DIR/hybrid-worker $i" C-m
         
         # Rebalance layout after each addition
         if [ $((i % 2)) -eq 0 ]; then
@@ -82,7 +86,7 @@ add_worker() {
     
     # Create new pane
     tmux split-window -t "$SESSION" -h
-    tmux send-keys -t "$SESSION:0.$((current_panes))" "./tools/worker-loop.sh $worker_id" C-m
+    tmux send-keys -t "$SESSION:0.$((current_panes))" "$SCRIPT_DIR/hybrid-worker $worker_id" C-m
     
     # Rebalance layout
     adjust_layout $((current_panes))
@@ -108,7 +112,7 @@ remove_worker() {
     local pane_id=""
     for pane in $(tmux list-panes -t "$SESSION" -F '#{pane_index}' | tail -n +2); do
         local pane_cmd=$(tmux display -p -t "$SESSION:0.$pane" '#{pane_current_command}')
-        if [[ "$pane_cmd" =~ "worker-loop.sh $worker_id" ]]; then
+        if [[ "$pane_cmd" =~ "hybrid-worker $worker_id" ]]; then
             pane_id=$pane
             break
         fi
