@@ -1,17 +1,17 @@
 # 🚀 Quick Start Guide
 
-Get up and running with Claude Code Parallel in 5 minutes.
+Get up and running with Claude Code Parallel's hybrid architecture in 5 minutes.
 
 ## Prerequisites
 
-- [Claude Code](https://claude.ai/code) subscription
+- [Claude Code](https://claude.ai/code) subscription (MAX recommended)
 - Git repository with GitHub issues
 - macOS or Linux (Windows WSL works too)
 
 ## 1. Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-tools/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-parallel/main/install.sh | bash
 ```
 
 This installs:
@@ -19,7 +19,21 @@ This installs:
 - Support tools in `~/bin/claude-tools/`
 - Dependencies (tmux, gh CLI, pueue)
 
-## 2. Create GitHub Issues
+## 2. Setup Hybrid Architecture
+
+```bash
+# Run the hybrid setup (one-time)
+./tools/setup-hybrid
+
+# This will:
+# ✓ Install and configure Pueue daemon
+# ✓ Set up worker groups
+# ✓ Configure autonomous Claude settings
+# ✓ Start auto-approval daemon
+# ✓ Verify all components
+```
+
+## 3. Create GitHub Issues
 
 Create issues describing what you want to build:
 
@@ -33,7 +47,7 @@ Description:
 - Add tests
 ```
 
-## 3. Start Parallel Development
+## 4. Start Parallel Development
 
 ```bash
 # Navigate to your project
@@ -46,7 +60,7 @@ cd my-project
 /project:work 123,124,125 8
 ```
 
-## 4. Watch Progress
+## 5. Watch Progress
 
 ```bash
 # Check current status
@@ -54,35 +68,59 @@ cd my-project
 
 # Watch live updates
 /project:status --watch
+
+# Or use Pueue directly
+pueue status
+pueue follow  # Live view
 ```
 
 You'll see:
-- Pueue queue status
-- Workers processing subissues
-- PRs being created
+- Pueue queue status with task states
+- Workers processing subissues in tmux
+- PRs being created automatically
 - Real-time progress metrics
+- Failed tasks with retry counts
 
-## 5. Manage Work
+## 6. Manage Work
 
 ```bash
 # Add more issues
 /project:add 126,127
 
+# Pause all work
+pueue pause
+
+# Resume work
+pueue start
+
 # Stop gracefully
 /project:stop
 
-# Resume later
+# Resume later (automatic with Pueue)
 /project:resume
+
+# Scale workers
+pueue parallel 16 --group workers  # More workers
+pueue parallel 4 --group workers   # Fewer workers
 ```
 
-## What Happens?
+## What Happens Under the Hood?
 
 1. **Claude analyzes** your issues and creates logical subissues
-2. **Pueue manages** the task queue with priorities and dependencies
-3. **Workers start** in parallel tmux sessions via Pueue
-4. **Each worker** picks subissues from the Pueue queue
-5. **PRs are created** automatically when work completes
-6. **Parent issues close** when all subissues are done
+2. **Pueue daemon** manages the task queue with persistence
+3. **Hybrid workers** are Pueue tasks that spawn tmux sessions
+4. **Each tmux session** runs Claude Code on a subissue
+5. **Auto-approval** watches sessions and handles prompts
+6. **PRs are created** automatically when work completes
+7. **Parent issues close** when all subissues are done
+
+### The Hybrid Architecture Advantage
+
+```
+GitHub Issue → Claude Analysis → Pueue Queue → Tmux Worker → PR
+     #42         Creates 4         Reliable      Visible      Auto
+                 subissues        & Persistent   to Claude    Created
+```
 
 ## Example Session
 
@@ -108,19 +146,39 @@ $ /project:work 42 4
 ✅ All done! Created 4 PRs. Issue #42 will close when merged.
 ```
 
-## Tips
+## Tips for Success
 
 - **Start small**: Try with 1-2 issues first
 - **Clear descriptions**: Better issues = better subissues
-- **Monitor first run**: Watch to ensure quality
-- **Scale up**: Add more workers as needed
+- **Monitor first run**: Use `pueue follow` to watch workers
+- **Scale gradually**: Start with 4 workers, increase as needed
+- **Check failures**: `pueue log <id>` shows why tasks failed
+- **Trust recovery**: Pueue automatically retries failed tasks
+
+## Troubleshooting Quick Fixes
+
+```bash
+# Pueue daemon not running?
+pueued -d
+
+# Workers stuck?
+pueue restart --all-failed
+
+# Need to stop everything?
+pueue kill --all
+pueue clean
+
+# System overloaded?
+pueue parallel 2 --group workers
+```
 
 ## Next Steps
 
-- Read [Workflow Examples](WORKFLOW.md)
-- Check [Architecture](ARCHITECTURE.md) for details
+- Learn [Pueue Commands](PUEUE_COMMANDS.md) for power users
+- Read [Troubleshooting Guide](TROUBLESHOOTING.md) for issues
+- Check [Architecture](../developer-guide/current-architecture/ARCHITECTURE.md) for details
 - See [FAQ](FAQ.md) for common questions
 
 ---
 
-Ready? Pick an issue and run `/project:work` to begin!
+Ready? Pick an issue and run `/project:work` to begin parallel development!
