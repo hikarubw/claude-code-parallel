@@ -1,6 +1,6 @@
 # Autonomous Development Mode
 
-Run Claude Code Tools in fully autonomous mode with intelligent scheduling.
+Run Claude Code Parallel in fully autonomous mode with intelligent scheduling.
 
 Usage: /project:auto <start|stop|config>
 

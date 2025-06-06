@@ -1,6 +1,6 @@
 # Initialize Project
 
-Prepare your project for parallel development.
+Prepare your project for parallel development with the hybrid Pueue+Tmux architecture.
 
 Usage: /project:setup
 
@@ -12,21 +12,25 @@ Arguments: $ARGUMENTS
 - Check git repository status
 - Ensure GitHub CLI is authenticated
 - Verify tmux is installed
-- Check directory permissions
+- Check Pueue installation
+- Verify directory permissions
 
-### 2. Create Directories
+### 2. Install Dependencies
+- Install Pueue if not present
+- Configure Pueue daemon
+- Set up Pueue groups for workers
 - Initialize `.claude/` structure
-- Set up worker directories at `~/.claude/workers/`
-- Create logs directory
 
 ### 3. Configure Settings
 - Apply autonomous operation settings
 - Set up git worktree configuration
-- Configure command aliases
+- Configure Pueue for Claude Code Parallel
+- Set up command aliases
 
 ### 4. Test Setup
 - Verify GitHub API access
-- Test tmux session creation
+- Test Pueue task creation
+- Test tmux session via Pueue
 - Check worktree operations
 
 ## Post-Setup
@@ -52,8 +56,11 @@ If setup fails:
 ✓ Git repository detected
 ✓ GitHub CLI authenticated
 ✓ Tmux available
+✓ Pueue installed and configured
 ✓ Created .claude/ directory
 ✓ Configured autonomous settings
+✓ Pueue daemon started
+✓ Worker group created
 ✓ Setup complete!
 
 Ready to start parallel development.

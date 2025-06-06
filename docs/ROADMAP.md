@@ -1,12 +1,14 @@
-# Claude Code Tools - Development Roadmap
+# Claude Code Parallel - Development Roadmap
 
-## Current State (v0.3.0-experimental)
-- ✅ **Subissue-Based Worker Pool Architecture**
+## Current State (v0.3.0-experimental - Hybrid Architecture)
+- ✅ **Hybrid Pueue+Tmux Architecture** (ADR-003)
+- ✅ Pueue for robust queue management
+- ✅ Tmux for Claude Code compatibility
 - ✅ Intelligent issue analysis with Claude
-- ✅ Priority queue management
+- ✅ Priority queue with Pueue backend
 - ✅ Autonomous worker sessions
 - ✅ Automatic PR creation
-- ✅ Resume capability
+- ✅ Resume capability via Pueue
 - ✅ 99% autonomous operation
 
 ## Philosophy
@@ -14,74 +16,97 @@
 - **Claude intelligence**: AI analyzes and decomposes work
 - **Natural GitHub flow**: Issues → Subissues → PRs
 - **Zero configuration**: Just provide issue numbers
+- **Rock-solid reliability**: Pueue ensures no lost work
 
 ## Architecture Evolution
 
-### v1.0 (Original)
+### v0.1.0 (Original)
 - Issue-based parallelism
 - Manual orchestration
 - Limited scalability
 
-### v2.0 (Task-Based) - Archived
+### v0.2.0 (Task-Based) - Archived
 - Checklist items as tasks
 - Complex ID system (#47-1)
 - Manual task creation
 
-### v0.3.0 (Current) - Subissue-Based (Experimental)
-- Automatic issue decomposition
-- Worker pool pattern
-- Priority queue system
-- Fully autonomous
+### v0.2.5 (File-Based Queue)
+- Simple file-based queue
+- Basic worker management
+- Manual recovery needed
+
+### v0.3.0-experimental (Current) - Hybrid Pueue+Tmux
+- Pueue for queue management
+- Tmux for Claude Code sessions
+- Automatic crash recovery
+- Native pause/resume support
+- Robust dependency handling
 
 ## Future Directions
 
-### Near Term (v0.4.0) - Enhanced Intelligence
-- **Smarter Issue Analysis**
-  - Learn from successful patterns
-  - Optimize subissue sizing
-  - Better dependency detection
+### Immediate Focus (v0.3.1) - Perfect the Hybrid
+- **Production-Ready Pueue Integration**
+  - Optimize Pueue task parameters
+  - Fine-tune retry mechanisms
+  - Perfect crash recovery flows
   
-- **Advanced Queue Management**
-  - Dynamic priority adjustment
-  - Predictive task assignment
-  - Load balancing algorithms
+- **Enhanced Monitoring**
+  - Unified Pueue+Tmux dashboard
+  - Real-time worker health metrics
+  - Queue performance analytics
   
-- **Performance Monitoring**
-  - Real-time metrics dashboard
-  - Worker efficiency tracking
-  - Bottleneck identification
+- **Reliability Improvements**
+  - Automatic dead worker detection
+  - Smart task redistribution
+  - Zero-downtime updates
 
-### Medium Term (v0.5.0) - Scale & Integration
+### Near Term (v4.0) - Extract Pueue-TUI (ADR-004)
+- **Pueue-TUI as Independent Tool**
+  - Extract queue orchestration logic
+  - Create standalone Pueue-TUI package
+  - Support multiple backends (Pueue, Celery, etc.)
+  
+- **Enhanced Queue Features**
+  - Complex dependency graphs
+  - Conditional task execution
+  - Resource-based scheduling
+  
+- **Developer Experience**
+  - Simple Pueue-TUI CLI
+  - Web dashboard for monitoring
+  - Plugin architecture
+
+### Medium Term (v5.0) - Scale & Integration
 - **Distributed Workers**
-  - Run workers on multiple machines
-  - Central queue server
-  - Network resilience
+  - Multi-machine support via Pueue groups
+  - Central Pueue-TUI coordinator
+  - Network partition handling
   
 - **CI/CD Integration**
-  - Auto-merge approved PRs
-  - Continuous deployment triggers
-  - Test result feedback
+  - GitHub Actions workflows
+  - Auto-merge capabilities
+  - Test result feedback loops
   
 - **Team Features**
-  - Shared worker pools
-  - Team dashboards
-  - Work attribution
+  - Shared Pueue daemon
+  - Team work distribution
+  - Performance analytics
 
-### Long Term (v1.0.0) - Production Ready
+### Long Term (v1.0.0) - AI-Native Development
 - **Predictive Development**
-  - Suggest issues from codebase analysis
-  - Proactive technical debt identification
-  - Architecture evolution recommendations
+  - AI-suggested issue decomposition
+  - Proactive refactoring detection
+  - Architecture evolution planning
   
-- **Multi-Model Collaboration**
-  - Different AI models for different tasks
-  - Specialized workers (frontend, backend, tests)
-  - Cross-model review system
+- **Multi-Model Orchestration**
+  - Task routing by AI capability
+  - Specialized model selection
+  - Cross-model validation
   
 - **Self-Improving System**
-  - Learn from PR reviews
-  - Adapt to team coding styles
-  - Optimize for specific repositories
+  - Learn from PR feedback
+  - Adapt to codebase patterns
+  - Optimize queue strategies
 
 ## Integration Roadmap
 

@@ -1,4 +1,4 @@
-# 🚀 Claude Code Tools - Parallel Development Made Simple (Experimental)
+# 🚀 Claude Code Parallel - Parallel Development Made Simple (Experimental)
 
 > ⚠️ **EXPERIMENTAL**: v0.3.0 - Architecture and APIs are subject to change
 
@@ -6,7 +6,7 @@
 
 ## What is this?
 
-Claude Code Tools extends [Claude Code](https://claude.ai/code) to enable **parallel development** - multiple Claude sessions working on different parts of your codebase simultaneously.
+Claude Code Parallel extends [Claude Code](https://claude.ai/code) to enable **parallel development** - multiple Claude sessions working on different parts of your codebase simultaneously.
 
 ## 🎯 The Problem
 
@@ -18,7 +18,7 @@ Traditional development is sequential:
 
 ## ✨ The Solution
 
-With Claude Code Tools:
+With Claude Code Parallel:
 ```bash
 # Start 8 parallel workers on your GitHub issues
 /project:work 123,124,125 8

@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the redesigned architecture for claude-code-tools, shifting from issue-based to task-based parallelism. This approach treats GitHub issues as containers for related tasks (checklist items), with each task becoming an independent unit of parallel work.
+This document describes the redesigned architecture for claude-code-parallel, shifting from issue-based to task-based parallelism. This approach treats GitHub issues as containers for related tasks (checklist items), with each task becoming an independent unit of parallel work.
 
 ## Core Concepts
 

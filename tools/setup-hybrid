@@ -1,0 +1,238 @@
+#!/bin/bash
+# Setup script for hybrid Pueue + Tmux architecture
+# Implements the revolutionary approach from ADR-003
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+echo -e "${BLUE}=== Claude Code Tools Hybrid Architecture Setup ===${NC}"
+echo "This implements the hybrid Pueue + Tmux approach from ADR-003"
+echo
+
+# Check dependencies
+check_dependencies() {
+    echo "Checking dependencies..."
+    
+    # Check tmux
+    if ! command -v tmux &> /dev/null; then
+        echo -e "${RED}Error: tmux not installed${NC}"
+        echo "Install with: brew install tmux"
+        exit 1
+    fi
+    
+    # Check Pueue
+    if ! command -v pueue &> /dev/null; then
+        echo -e "${YELLOW}Pueue not installed. Installing...${NC}"
+        
+        if command -v brew &> /dev/null; then
+            brew install pueue
+        elif command -v cargo &> /dev/null; then
+            cargo install pueue
+        else
+            echo -e "${RED}Error: Cannot install Pueue. Install manually:${NC}"
+            echo "  brew install pueue"
+            echo "  OR"
+            echo "  cargo install pueue"
+            exit 1
+        fi
+    fi
+    
+    # Check jq
+    if ! command -v jq &> /dev/null; then
+        echo -e "${YELLOW}jq not installed. Installing...${NC}"
+        brew install jq || {
+            echo -e "${RED}Error: Failed to install jq${NC}"
+            exit 1
+        }
+    fi
+    
+    echo -e "${GREEN}✓ All dependencies satisfied${NC}"
+}
+
+# Start Pueue daemon
+start_pueue() {
+    echo "Starting Pueue daemon..."
+    
+    if pueue status &>/dev/null; then
+        echo -e "${GREEN}✓ Pueue daemon already running${NC}"
+    else
+        pueued -d
+        sleep 2
+        
+        if pueue status &>/dev/null; then
+            echo -e "${GREEN}✓ Pueue daemon started${NC}"
+        else
+            echo -e "${RED}Error: Failed to start Pueue daemon${NC}"
+            exit 1
+        fi
+    fi
+    
+    # Initialize subissues group
+    ~/Documents/repo/claude-code-tools/tools/queue-pueue init
+}
+
+# Create hybrid worker session
+create_worker_session() {
+    local workers=${1:-4}
+    
+    echo -e "${BLUE}Creating hybrid worker session with $workers workers...${NC}"
+    
+    # Kill existing session if exists
+    tmux kill-session -t claude-workers 2>/dev/null || true
+    
+    # Create new session with grid layout
+    ~/Documents/repo/claude-code-tools/tools/grid-manager create $workers
+    
+    # Update each worker pane to run hybrid-worker
+    for i in $(seq 1 $workers); do
+        tmux send-keys -t "claude-workers:0.$i" C-c 2>/dev/null || true
+        sleep 0.5
+        tmux send-keys -t "claude-workers:0.$i" "clear" C-m
+        tmux send-keys -t "claude-workers:0.$i" "~/Documents/repo/claude-code-tools/tools/hybrid-worker $i" C-m
+    done
+    
+    # Update monitor pane
+    tmux send-keys -t "claude-workers:0.0" C-c 2>/dev/null || true
+    sleep 0.5
+    tmux send-keys -t "claude-workers:0.0" "~/Documents/repo/claude-code-tools/tools/queue-pueue monitor" C-m
+    
+    echo -e "${GREEN}✓ Hybrid worker session created${NC}"
+}
+
+# Migrate existing queue
+migrate_queue() {
+    echo "Migrating existing queue to hybrid architecture..."
+    
+    if [ -f "$HOME/.claude/queue/queue.txt" ]; then
+        ~/Documents/repo/claude-code-tools/tools/queue-pueue migrate
+        echo -e "${GREEN}✓ Queue migrated successfully${NC}"
+    else
+        echo "No existing queue found, skipping migration"
+    fi
+}
+
+# Setup auto-approval for hybrid
+setup_auto_approval() {
+    echo "Configuring auto-approval for hybrid architecture..."
+    
+    # The existing auto-approval works perfectly with hybrid!
+    # It monitors tmux panes where Claude runs
+    
+    if pgrep -f "auto-approve" > /dev/null; then
+        echo -e "${GREEN}✓ Auto-approval already running${NC}"
+    else
+        echo "Start auto-approval with: ./tools/auto-approve &"
+        echo -e "${YELLOW}Note: Auto-approval works seamlessly with hybrid architecture${NC}"
+    fi
+}
+
+# Create demo subissues
+create_demo() {
+    echo -e "${BLUE}Creating demo subissues...${NC}"
+    
+    # Add some test subissues
+    ~/Documents/repo/claude-code-tools/tools/queue-pueue add 1 "123" "301"
+    ~/Documents/repo/claude-code-tools/tools/queue-pueue add 2 "123" "302"
+    ~/Documents/repo/claude-code-tools/tools/queue-pueue add 3 "124" "303"
+    
+    echo -e "${GREEN}✓ Demo subissues added to hybrid queue${NC}"
+}
+
+# Show usage
+show_usage() {
+    cat << EOF
+${BLUE}Hybrid Architecture Quick Start:${NC}
+
+1. View worker session:
+   tmux attach -t claude-workers
+
+2. Add subissues:
+   ./tools/queue-pueue add <priority> <parent> <subissue>
+
+3. Monitor status:
+   ./tools/queue-pueue monitor
+
+4. View Pueue status:
+   pueue status --group subissues
+
+5. Pause/resume processing:
+   pueue pause --group subissues
+   pueue start --group subissues
+
+${YELLOW}Key Benefits:${NC}
+- Pueue provides persistence and crash recovery
+- Claude remains visible in tmux panes
+- Auto-approval continues to work
+- Advanced scheduling and dependencies available
+
+${GREEN}The best of both worlds!${NC}
+EOF
+}
+
+# Main setup flow
+main() {
+    local workers=${1:-4}
+    local demo=${2:-false}
+    
+    check_dependencies
+    start_pueue
+    create_worker_session "$workers"
+    migrate_queue
+    setup_auto_approval
+    
+    if [ "$demo" = "demo" ]; then
+        create_demo
+    fi
+    
+    echo
+    echo -e "${GREEN}=== Hybrid Architecture Setup Complete! ===${NC}"
+    echo
+    show_usage
+    
+    echo
+    echo -e "${BLUE}Attach to session with:${NC} tmux attach -t claude-workers"
+}
+
+# Handle command line args
+case "${1:-help}" in
+    [0-9]*)
+        # Number of workers specified
+        main "$1" "$2"
+        ;;
+    
+    demo)
+        # Setup with demo data
+        main 4 demo
+        ;;
+    
+    clean)
+        # Clean everything
+        echo "Cleaning hybrid setup..."
+        tmux kill-session -t claude-workers 2>/dev/null || true
+        pueue clean --group subissues 2>/dev/null || true
+        pueue reset --force 2>/dev/null || true
+        echo -e "${GREEN}✓ Cleanup complete${NC}"
+        ;;
+    
+    *)
+        echo "Usage: setup-hybrid [workers] [demo]"
+        echo ""
+        echo "Examples:"
+        echo "  setup-hybrid        # Setup with 4 workers"
+        echo "  setup-hybrid 8      # Setup with 8 workers"  
+        echo "  setup-hybrid demo   # Setup with demo data"
+        echo "  setup-hybrid clean  # Clean everything"
+        echo ""
+        echo "This script sets up the revolutionary hybrid architecture:"
+        echo "- Pueue for professional queue management"
+        echo "- Tmux for Claude visibility"
+        echo "- Auto-approval continues to work"
+        echo "- Best of both worlds!"
+        ;;
+esac

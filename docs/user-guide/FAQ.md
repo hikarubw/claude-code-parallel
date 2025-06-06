@@ -3,13 +3,14 @@
 ## General Questions
 
 ### What is Claude Code Parallel?
-Claude Code Parallel is a tool that enables Claude Code to work on multiple tasks simultaneously using git worktrees and tmux sessions. It manages parallel development with intelligent orchestration.
+Claude Code Parallel extends Claude Code with parallel development capabilities using a hybrid Pueue+Tmux architecture. It enables working on multiple GitHub issues simultaneously with intelligent orchestration.
 
 ### How is this different from regular Claude Code?
-- **Parallel Execution**: Work on multiple issues at once
-- **Autonomous Operation**: 90% fewer approval interruptions
-- **Isolated Environments**: Each task gets its own git worktree
-- **Smart Orchestration**: Claude manages dependencies and assignments
+- **Parallel Execution**: Work on multiple issues at once via Pueue
+- **Autonomous Operation**: 99% fewer approval interruptions
+- **Queue Management**: Robust Pueue backend for reliability
+- **Smart Orchestration**: Claude manages issue decomposition
+- **Crash Recovery**: Automatic recovery via Pueue persistence
 
 ### Is it safe to give Claude so many permissions?
 Yes! The key is **worktree isolation**:
@@ -24,11 +25,13 @@ Yes! The key is **worktree isolation**:
 - Git repository
 - Bash shell
 - Claude Code (MAX subscription recommended)
-- Optional: GitHub CLI (`gh`), tmux
+- GitHub CLI (`gh`)
+- Tmux
+- Pueue (installed automatically)
 
 ### How do I update to the latest version?
 ```bash
-curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-parallel/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-tools/main/install.sh | bash
 ```
 
 ### Can I uninstall it?
@@ -41,8 +44,9 @@ curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-parallel/main/
 ### Why am I still getting approval prompts?
 Check that:
 1. You're working in a worktree (not main branch)
-2. Autonomous settings are applied: `./tools/setup-autonomous check`
+2. Autonomous settings are applied: `./tools/setup-hybrid check`
 3. You're using the latest version
+4. Pueue daemon is running: `pueue status`
 
 ### How many parallel sessions can I run?
 - **Recommended**: 5-10 sessions
@@ -50,10 +54,11 @@ Check that:
 - **Factors**: CPU, memory, disk I/O
 
 ### What happens if a session fails?
+- Pueue automatically retries failed tasks
 - Work is preserved in the worktree
-- You can restart the session
 - Other sessions continue working
-- Use `/project:status` to check health
+- Use `/project:status` to check queue health
+- Failed tasks appear in `pueue status`
 
 ### Can I use this without GitHub?
 The core parallel execution works without GitHub, but you'll miss:
@@ -107,10 +112,24 @@ sudo apt update
 sudo apt install gh
 ```
 
+### "Command not found: pueue"
+Install Pueue:
+```bash
+# macOS
+brew install pueue
+
+# Linux
+curl -sSL https://github.com/Nukesor/pueue/releases/latest/download/pueued-linux-x86_64 -o pueued
+curl -sSL https://github.com/Nukesor/pueue/releases/latest/download/pueue-linux-x86_64 -o pueue
+chmod +x pueued pueue
+sudo mv pueued pueue /usr/local/bin/
+```
+
 ### Sessions seem stuck
-1. Check status: `/project:status`
-2. View logs: `tmux attach -t claude-1`
-3. Restart session: `./tools/session stop 1 && ./tools/session start 1`
+1. Check Pueue status: `pueue status`
+2. View task logs: `pueue log <task-id>`
+3. Restart task: `pueue restart <task-id>`
+4. Check tmux session: `tmux attach -t worker-<id>`
 
 ### Worktrees taking too much space
 ```bash

@@ -9,7 +9,7 @@ This project is in active experimentation phase. Architecture and APIs are subje
 ## 🏗️ Current Architecture: Subissue-Based Worker Pool
 
 ### Overview
-Claude Code Tools extends Claude Code with parallel development capabilities. Users provide GitHub issues, and the system:
+Claude Code Parallel extends Claude Code with parallel development capabilities. Users provide GitHub issues, and the system:
 1. Analyzes issues using Claude intelligence
 2. Creates logical subissues (2-5 per parent issue)
 3. Manages work via priority queue
@@ -51,6 +51,9 @@ When making architecture changes or redesigns:
 
 Current ADRs:
 - `docs/archive/proposals/ADR-001-SUBISSUE-WORKER-ARCHITECTURE.md` - v0.3.0 architecture
+- `docs/ADR-002-SINGLE-TMUX-VS-PUEUE.md` - Analysis of single tmux session vs Pueue (Keep current architecture)
+- `docs/ADR-003-HYBRID-PUEUE-TMUX.md` - **Revolutionary hybrid approach** - Pueue for queue + Tmux for visibility (Game changer!)
+- `docs/ADR-004-PUEUE-NATIVE-AND-PUEUE-TUI.md` - **Next evolution** - Extract Pueue-TUI as independent visualization tool!
 
 ### When Working on This Project
 1. **Maintain Simplicity** - The power is in simplicity, not complexity
@@ -106,9 +109,23 @@ Currently experimenting with:
 
 ## 🚀 Future Directions
 
-Working towards:
-- v0.4.0 - Enhanced intelligence and learning
-- v0.5.0 - Distributed workers and scale
+### Immediate: Hybrid Architecture Implementation
+The revolutionary hybrid Pueue + Tmux approach (ADR-003) solves our core architectural challenge:
+- Professional queue management (Pueue) 
+- Maintained Claude visibility (Tmux)
+- Auto-approval continues working
+- Best of both worlds!
+
+**Implementation available**:
+- `tools/setup-hybrid` - One-command setup
+- `tools/hybrid-worker` - Worker implementation  
+- `tools/queue-pueue` - Queue adapter
+- `docs/HYBRID-ARCHITECTURE-GUIDE.md` - Complete guide
+
+### Roadmap:
+- v0.4.0 - Hybrid architecture migration
+- v0.5.0 - Enhanced intelligence with dependencies
+- v0.6.0 - Distributed workers across machines
 - v1.0.0 - Production-ready system
 
 ---

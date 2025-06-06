@@ -13,7 +13,7 @@ readonly REPO="hikarubw/claude-code-parallel"
 if [ -f "VERSION" ]; then
     readonly VERSION=$(cat VERSION)
 else
-    readonly VERSION=$(curl -fsSL "https://raw.githubusercontent.com/$REPO/main/VERSION" 2>/dev/null || echo "2.0.0")
+    readonly VERSION=$(curl -fsSL "https://raw.githubusercontent.com/$REPO/main/VERSION" 2>/dev/null || echo "0.3.0-experimental")
 fi
 readonly BASE_URL="https://raw.githubusercontent.com/$REPO/main"
 

@@ -10,7 +10,7 @@ set -euo pipefail
 
 # Configuration
 readonly REPO="hikarubw/claude-code-parallel"
-readonly VERSION=$(cat .claude/VERSION 2>/dev/null || echo "1.0.0")
+readonly VERSION=$(cat VERSION 2>/dev/null || echo "0.3.0-experimental")
 
 # Colors
 readonly GREEN='\033[0;32m'
@@ -33,7 +33,7 @@ create_bundle() {
 
 set -euo pipefail
 
-readonly VERSION="1.0.1"
+readonly VERSION="0.3.0-experimental"
 readonly TOOLS=(task session github maintain)
 readonly COMMANDS=(setup work status manual maintain auto)
 

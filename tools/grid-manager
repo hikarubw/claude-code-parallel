@@ -1,0 +1,255 @@
+#!/bin/bash
+# Grid manager prototype - Dynamic tmux pane layout for single session
+
+SESSION="claude-workers"
+MONITOR_WIDTH=50  # Width of monitor pane in columns
+
+# Calculate optimal grid dimensions
+calculate_grid() {
+    local total_panes=$1
+    local cols=$(echo "sqrt($total_panes)" | bc)
+    local rows=$(( (total_panes + cols - 1) / cols ))
+    echo "$rows $cols"
+}
+
+# Create initial grid with monitor
+create_grid() {
+    local workers=${1:-4}
+    
+    echo "Creating worker grid with $workers workers + monitor..."
+    
+    # Kill existing session if exists
+    tmux kill-session -t "$SESSION" 2>/dev/null
+    
+    # Create new session
+    tmux new-session -d -s "$SESSION"
+    tmux set -t "$SESSION" mouse on
+    
+    # Start monitor in first pane
+    tmux send-keys -t "$SESSION:0.0" './tools/monitoring-pane.sh' C-m
+    
+    # Create worker panes
+    for i in $(seq 1 $workers); do
+        tmux split-window -t "$SESSION" -h
+        tmux send-keys -t "$SESSION:0.$i" "./tools/worker-loop.sh $i" C-m
+        
+        # Rebalance layout after each addition
+        if [ $((i % 2)) -eq 0 ]; then
+            tmux select-layout -t "$SESSION" tiled
+        fi
+    done
+    
+    # Final layout adjustment
+    adjust_layout $workers
+    
+    echo "Grid created. Attach with: tmux attach -t $SESSION"
+}
+
+# Adjust layout to keep monitor pane visible
+adjust_layout() {
+    local workers=$1
+    local total_panes=$((workers + 1))
+    
+    # Use custom layout string for better control
+    if [ $total_panes -le 4 ]; then
+        # 2x2 grid with monitor taking left side
+        tmux select-layout -t "$SESSION" "3c3f,120x30,0,0{60x30,0,0,0,59x30,61,0[59x14,61,0,1,59x15,61,15,2]}"
+    elif [ $total_panes -le 9 ]; then
+        # 3x3 grid with monitor in top-left
+        tmux select-layout -t "$SESSION" tiled
+        tmux resize-pane -t "$SESSION:0.0" -x $MONITOR_WIDTH
+    else
+        # For larger grids, use tiled layout
+        tmux select-layout -t "$SESSION" tiled
+    fi
+    
+    # Ensure monitor pane is selected
+    tmux select-pane -t "$SESSION:0.0"
+}
+
+# Add a new worker dynamically
+add_worker() {
+    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo "Error: No active worker session found"
+        return 1
+    fi
+    
+    # Count current panes
+    local current_panes=$(tmux list-panes -t "$SESSION" | wc -l)
+    local worker_id=$current_panes
+    
+    echo "Adding worker $worker_id..."
+    
+    # Create new pane
+    tmux split-window -t "$SESSION" -h
+    tmux send-keys -t "$SESSION:0.$((current_panes))" "./tools/worker-loop.sh $worker_id" C-m
+    
+    # Rebalance layout
+    adjust_layout $((current_panes))
+    
+    echo "Worker $worker_id added"
+}
+
+# Remove a specific worker
+remove_worker() {
+    local worker_id=${1:-}
+    
+    if [ -z "$worker_id" ]; then
+        echo "Usage: grid-manager remove-worker WORKER_ID"
+        return 1
+    fi
+    
+    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo "Error: No active worker session found"
+        return 1
+    fi
+    
+    # Find pane with worker ID (skip monitor pane 0)
+    local pane_id=""
+    for pane in $(tmux list-panes -t "$SESSION" -F '#{pane_index}' | tail -n +2); do
+        local pane_cmd=$(tmux display -p -t "$SESSION:0.$pane" '#{pane_current_command}')
+        if [[ "$pane_cmd" =~ "worker-loop.sh $worker_id" ]]; then
+            pane_id=$pane
+            break
+        fi
+    done
+    
+    if [ -z "$pane_id" ]; then
+        echo "Worker $worker_id not found"
+        return 1
+    fi
+    
+    echo "Removing worker $worker_id (pane $pane_id)..."
+    
+    # Kill the pane
+    tmux kill-pane -t "$SESSION:0.$pane_id"
+    
+    # Rebalance layout
+    local remaining_panes=$(tmux list-panes -t "$SESSION" | wc -l)
+    adjust_layout $((remaining_panes - 1))
+    
+    echo "Worker $worker_id removed"
+}
+
+# Show grid status
+show_status() {
+    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo "No active worker session"
+        return 1
+    fi
+    
+    echo "Worker Grid Status"
+    echo "=================="
+    
+    tmux list-panes -t "$SESSION" -F '#{pane_index}: #{pane_width}x#{pane_height} #{pane_current_command}' | \
+    while read line; do
+        pane_idx=$(echo "$line" | cut -d: -f1)
+        if [ "$pane_idx" -eq 0 ]; then
+            echo "Monitor: $line"
+        else
+            echo "Worker $pane_idx: $line"
+        fi
+    done
+    
+    echo ""
+    echo "Total panes: $(tmux list-panes -t "$SESSION" | wc -l)"
+}
+
+# Demo different layouts
+demo_layouts() {
+    echo "Demonstrating different grid layouts..."
+    
+    for workers in 2 4 6 8; do
+        echo ""
+        echo "Layout for $workers workers:"
+        create_grid $workers
+        sleep 2
+        show_status
+        tmux capture-pane -t "$SESSION" -p | head -10
+        sleep 3
+    done
+}
+
+# Stress test with many workers
+stress_test() {
+    local max_workers=${1:-16}
+    
+    echo "Stress testing with up to $max_workers workers..."
+    
+    create_grid 1
+    
+    for i in $(seq 2 $max_workers); do
+        echo "Adding worker $i..."
+        add_worker
+        sleep 1
+        
+        # Check if layout is still readable
+        local min_width=$(tmux list-panes -t "$SESSION" -F '#{pane_width}' | sort -n | head -1)
+        local min_height=$(tmux list-panes -t "$SESSION" -F '#{pane_height}' | sort -n | head -1)
+        
+        echo "Minimum pane size: ${min_width}x${min_height}"
+        
+        if [ $min_width -lt 40 ] || [ $min_height -lt 10 ]; then
+            echo "WARNING: Panes becoming too small at $i workers"
+            echo "Recommended maximum: $((i-1)) workers"
+            break
+        fi
+    done
+}
+
+# Main command handling
+case "${1:-help}" in
+    create)
+        create_grid "${2:-4}"
+        ;;
+    
+    add|add-worker)
+        add_worker
+        ;;
+    
+    remove|remove-worker)
+        remove_worker "$2"
+        ;;
+    
+    status)
+        show_status
+        ;;
+    
+    adjust)
+        if tmux has-session -t "$SESSION" 2>/dev/null; then
+            local panes=$(tmux list-panes -t "$SESSION" | wc -l)
+            adjust_layout $((panes - 1))
+        fi
+        ;;
+    
+    demo)
+        demo_layouts
+        ;;
+    
+    stress-test)
+        stress_test "${2:-16}"
+        ;;
+    
+    attach)
+        tmux attach -t "$SESSION"
+        ;;
+    
+    *)
+        echo "Usage: grid-manager <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  create [N]           - Create grid with N workers (default: 4)"
+        echo "  add-worker           - Add a new worker to grid"
+        echo "  remove-worker ID     - Remove specific worker"
+        echo "  status               - Show current grid status"
+        echo "  adjust               - Rebalance pane layout"
+        echo "  demo                 - Demo various layouts"
+        echo "  stress-test [MAX]    - Test scalability limits"
+        echo "  attach               - Attach to worker session"
+        echo ""
+        echo "Examples:"
+        echo "  grid-manager create 6        # 6 workers + monitor"
+        echo "  grid-manager add-worker      # Add one more"
+        echo "  grid-manager remove-worker 3 # Remove worker 3"
+        ;;
+esac

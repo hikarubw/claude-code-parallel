@@ -1,6 +1,6 @@
 # 🚀 Quick Start Guide
 
-Get up and running with Claude Code Tools in 5 minutes.
+Get up and running with Claude Code Parallel in 5 minutes.
 
 ## Prerequisites
 
@@ -15,9 +15,9 @@ curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-tools/main/ins
 ```
 
 This installs:
-- Claude Code Tools commands in `.claude/commands/`
+- Claude Code Parallel commands in `.claude/commands/`
 - Support tools in `~/bin/claude-tools/`
-- Dependencies (tmux, gh CLI)
+- Dependencies (tmux, gh CLI, pueue)
 
 ## 2. Create GitHub Issues
 
@@ -57,6 +57,7 @@ cd my-project
 ```
 
 You'll see:
+- Pueue queue status
 - Workers processing subissues
 - PRs being created
 - Real-time progress metrics
@@ -77,10 +78,11 @@ You'll see:
 ## What Happens?
 
 1. **Claude analyzes** your issues and creates logical subissues
-2. **Workers start** in parallel tmux sessions
-3. **Each worker** picks subissues from the queue
-4. **PRs are created** automatically when work completes
-5. **Parent issues close** when all subissues are done
+2. **Pueue manages** the task queue with priorities and dependencies
+3. **Workers start** in parallel tmux sessions via Pueue
+4. **Each worker** picks subissues from the Pueue queue
+5. **PRs are created** automatically when work completes
+6. **Parent issues close** when all subissues are done
 
 ## Example Session
 

@@ -1,0 +1,122 @@
+#!/bin/bash
+# Hybrid worker - Revolutionary Pueue + Tmux architecture
+# This runs INSIDE a tmux pane, polls Pueue, but executes Claude visibly
+
+WORKER_ID=${1:-1}
+WORKER_NAME="worker-$WORKER_ID"
+SESSION="claude-workers"
+PANE_ID="$SESSION:0.$WORKER_ID"
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Ensure Pueue daemon is running
+if ! pueue status &>/dev/null; then
+    echo -e "${RED}Error: Pueue daemon not running. Start with: pueued -d${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Hybrid Worker $WORKER_ID starting...${NC}"
+echo "Running in tmux pane: $PANE_ID"
+echo "Polling Pueue for subissue tasks..."
+
+# Main worker loop
+while true; do
+    # Get next queued task from Pueue
+    NEXT_TASK=$(pueue status --json 2>/dev/null | jq -r --arg group "subissues" '
+        .tasks | to_entries[] |
+        select(.value.status == "Queued" and 
+               (.value.group // "default") == $group and
+               (.value.label | startswith("subissue-"))) |
+        .value | {id, label, command} | @json
+    ' | head -1)
+    
+    if [[ -z "$NEXT_TASK" || "$NEXT_TASK" == "null" ]]; then
+        # No tasks, show waiting message
+        echo -ne "\r[$(date +%H:%M:%S)] No subissues in queue. Waiting..."
+        sleep 2
+        continue
+    fi
+    
+    # Parse task details
+    TASK_ID=$(echo "$NEXT_TASK" | jq -r '.id')
+    SUBISSUE_LABEL=$(echo "$NEXT_TASK" | jq -r '.label')
+    SUBISSUE_ID=$(echo "$SUBISSUE_LABEL" | cut -d- -f2)
+    
+    echo -e "\n${YELLOW}[$(date +%H:%M:%S)] Found task: $SUBISSUE_LABEL (Pueue ID: $TASK_ID)${NC}"
+    
+    # Start the task in Pueue (marks it as running)
+    pueue start $TASK_ID
+    
+    # Get subissue details from our queue
+    QUEUE_ITEM=$(~/Documents/repo/claude-code-tools/tools/queue get "subissue-$SUBISSUE_ID")
+    if [[ -z "$QUEUE_ITEM" ]]; then
+        echo -e "${RED}Error: Subissue $SUBISSUE_ID not found in queue${NC}"
+        pueue kill $TASK_ID
+        continue
+    fi
+    
+    # Parse queue item
+    PARENT_ISSUE=$(echo "$QUEUE_ITEM" | cut -d'|' -f2)
+    
+    echo -e "${GREEN}Processing subissue #$SUBISSUE_ID (parent: #$PARENT_ISSUE)${NC}"
+    
+    # Create worktree for this subissue
+    WORKTREE_PATH=".worktrees/subissue-$SUBISSUE_ID"
+    BRANCH_NAME="subissue/$PARENT_ISSUE-$SUBISSUE_ID"
+    
+    # Ensure we're in repo root
+    cd $(git rev-parse --show-toplevel)
+    
+    # Create worktree
+    if [ ! -d "$WORKTREE_PATH" ]; then
+        echo "Creating worktree at $WORKTREE_PATH..."
+        git worktree add "$WORKTREE_PATH" -b "$BRANCH_NAME" || {
+            echo -e "${RED}Failed to create worktree${NC}"
+            pueue kill $TASK_ID
+            ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" status failed
+            continue
+        }
+    fi
+    
+    # Move to worktree
+    cd "$WORKTREE_PATH"
+    
+    # THIS IS THE KEY: Claude runs IN THIS TMUX PANE where we can see it!
+    echo -e "${GREEN}Starting Claude in visible tmux pane...${NC}"
+    
+    # Update queue status
+    ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" status working
+    ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" assigned_to "$WORKER_NAME"
+    
+    # Run Claude with work instruction - THIS IS VISIBLE IN TMUX!
+    claude "/work-on subissue #$SUBISSUE_ID of parent issue #$PARENT_ISSUE && create a pull request when done"
+    
+    # Check if PR was created successfully
+    if gh pr list --head "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
+        echo -e "${GREEN}PR created successfully!${NC}"
+        
+        # Update queue
+        ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" status completed
+        
+        # Mark Pueue task as successful
+        pueue success $TASK_ID
+    else
+        echo -e "${YELLOW}No PR found, marking as needs review${NC}"
+        ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$SUBISSUE_ID" status review
+        
+        # Mark Pueue task as failed
+        pueue kill $TASK_ID
+    fi
+    
+    # Clean up worktree
+    cd $(git rev-parse --show-toplevel)
+    echo "Cleaning up worktree..."
+    git worktree remove "$WORKTREE_PATH" --force 2>/dev/null || true
+    
+    echo -e "${GREEN}Completed subissue #$SUBISSUE_ID${NC}"
+    echo "Looking for next task..."
+done

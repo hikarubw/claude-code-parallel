@@ -1,0 +1,186 @@
+#!/bin/bash
+# Queue-Pueue adapter - Bridge between our file queue and Pueue
+# Implements hybrid architecture from ADR-003
+
+set -e
+
+QUEUE_FILE="$HOME/.claude/queue/queue.txt"
+PUEUE_GROUP="subissues"
+
+# Ensure Pueue group exists
+ensure_pueue_group() {
+    if ! pueue group | grep -q "^$PUEUE_GROUP"; then
+        pueue group add "$PUEUE_GROUP"
+        pueue parallel 8 --group "$PUEUE_GROUP"  # Allow 8 parallel workers
+        echo "Created Pueue group: $PUEUE_GROUP"
+    fi
+}
+
+# Sync our file queue to Pueue
+sync_to_pueue() {
+    echo "Syncing file queue to Pueue..."
+    
+    ensure_pueue_group
+    
+    # Get all pending items from our queue
+    while IFS='|' read -r priority parent subissue status worker created; do
+        if [[ "$status" == "pending" ]]; then
+            # Check if already in Pueue
+            label="subissue-$subissue"
+            existing=$(pueue status --json | jq -r --arg label "$label" '
+                .tasks | to_entries[] | 
+                select(.value.label == $label and 
+                      (.value.status == "Queued" or .value.status == "Running")) | 
+                .key
+            ')
+            
+            if [[ -z "$existing" ]]; then
+                # Add to Pueue with priority
+                pueue add \
+                    --label "$label" \
+                    --group "$PUEUE_GROUP" \
+                    --priority $((10 - priority)) \
+                    "process_subissue $subissue"
+                    
+                echo "Added $label to Pueue (priority: $priority)"
+            fi
+        fi
+    done < "$QUEUE_FILE"
+}
+
+# Update our queue based on Pueue status
+sync_from_pueue() {
+    echo "Syncing Pueue status back to file queue..."
+    
+    # Get all Pueue tasks in our group
+    pueue status --json | jq -r --arg group "$PUEUE_GROUP" '
+        .tasks | to_entries[] |
+        select(.value.group == $group and (.value.label | startswith("subissue-"))) |
+        "\(.value.label)|\(.value.status)"
+    ' | while IFS='|' read -r label status; do
+        subissue_id=$(echo "$label" | cut -d- -f2)
+        
+        case "$status" in
+            "Running")
+                ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$subissue_id" status working
+                ;;
+            "Success")
+                ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$subissue_id" status completed
+                ;;
+            "Failed"|"Killed")
+                ~/Documents/repo/claude-code-tools/tools/queue update "subissue-$subissue_id" status failed
+                ;;
+        esac
+    done
+}
+
+# Add new subissue to both queues
+add_subissue() {
+    local priority=$1
+    local parent=$2
+    local subissue=$3
+    
+    # Add to our file queue first
+    ~/Documents/repo/claude-code-tools/tools/queue add "$priority" "$parent" "$subissue"
+    
+    # Add to Pueue
+    ensure_pueue_group
+    pueue add \
+        --label "subissue-$subissue" \
+        --group "$PUEUE_GROUP" \
+        --priority $((10 - priority)) \
+        "process_subissue $subissue"
+        
+    echo "Added subissue $subissue to both queues"
+}
+
+# Monitor and display unified status
+monitor() {
+    while true; do
+        clear
+        echo "=== Hybrid Queue Status (File + Pueue) ==="
+        echo
+        
+        # Show Pueue tasks
+        echo "Pueue Tasks:"
+        pueue status --group "$PUEUE_GROUP"
+        
+        echo
+        echo "File Queue Status:"
+        ~/Documents/repo/claude-code-tools/tools/queue status
+        
+        echo
+        echo "Workers in Tmux:"
+        tmux list-panes -t claude-workers -F "Pane #{pane_index}: #{pane_current_command}" 2>/dev/null || echo "No worker session"
+        
+        sleep 2
+    done
+}
+
+# Clean completed tasks
+clean() {
+    echo "Cleaning completed tasks from Pueue..."
+    pueue clean --group "$PUEUE_GROUP"
+    
+    echo "Cleaning completed items from file queue..."
+    ~/Documents/repo/claude-code-tools/tools/queue clean
+}
+
+# Main command handling
+case "${1:-help}" in
+    sync-to)
+        sync_to_pueue
+        ;;
+    
+    sync-from)
+        sync_from_pueue
+        ;;
+    
+    sync)
+        sync_to_pueue
+        sync_from_pueue
+        ;;
+    
+    add)
+        add_subissue "$2" "$3" "$4"
+        ;;
+    
+    monitor)
+        monitor
+        ;;
+    
+    clean)
+        clean
+        ;;
+    
+    init)
+        ensure_pueue_group
+        echo "Pueue group '$PUEUE_GROUP' initialized"
+        ;;
+    
+    migrate)
+        echo "Migrating existing queue to hybrid architecture..."
+        ensure_pueue_group
+        sync_to_pueue
+        echo "Migration complete!"
+        ;;
+    
+    *)
+        echo "Usage: queue-pueue <command> [args]"
+        echo ""
+        echo "Commands:"
+        echo "  init              - Initialize Pueue group"
+        echo "  migrate           - Migrate existing queue to Pueue"
+        echo "  sync-to           - Sync file queue → Pueue"
+        echo "  sync-from         - Sync Pueue → file queue"
+        echo "  sync              - Bidirectional sync"
+        echo "  add P PARENT ID   - Add subissue to both queues"
+        echo "  monitor           - Live status dashboard"
+        echo "  clean             - Clean completed tasks"
+        echo ""
+        echo "This adapter implements the hybrid architecture from ADR-003:"
+        echo "- Pueue manages queue persistence and scheduling"
+        echo "- Workers run in tmux panes for visibility"
+        echo "- File queue maintained for compatibility"
+        ;;
+esac

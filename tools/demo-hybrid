@@ -1,0 +1,124 @@
+#!/bin/bash
+# Demo script to showcase hybrid architecture capabilities
+
+set -e
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
+NC='\033[0m'
+
+echo -e "${BLUE}=== Claude Code Tools Hybrid Architecture Demo ===${NC}"
+echo "This demonstrates the revolutionary Pueue + Tmux approach"
+echo
+
+# Function to wait and show progress
+wait_with_progress() {
+    local seconds=$1
+    local message=$2
+    echo -ne "$message"
+    for i in $(seq 1 $seconds); do
+        echo -ne "."
+        sleep 1
+    done
+    echo " Done!"
+}
+
+# Setup hybrid if not already running
+if ! tmux has-session -t claude-workers 2>/dev/null; then
+    echo -e "${YELLOW}Setting up hybrid architecture...${NC}"
+    ./tools/setup-hybrid 4
+    wait_with_progress 3 "Waiting for workers to start"
+fi
+
+echo
+echo -e "${GREEN}=== Demo 1: Basic Queue Operations ===${NC}"
+
+# Add some tasks
+echo "Adding tasks with different priorities..."
+./tools/queue-pueue add 1 "123" "401"  # High priority
+./tools/queue-pueue add 3 "123" "402"  # Low priority  
+./tools/queue-pueue add 2 "124" "403"  # Medium priority
+
+echo -e "${GREEN}✓ Added 3 tasks with different priorities${NC}"
+
+# Show Pueue status
+echo
+echo -e "${BLUE}Pueue Queue Status:${NC}"
+pueue status --group subissues | head -20
+
+echo
+echo -e "${GREEN}=== Demo 2: Task Dependencies ===${NC}"
+
+# Add dependent tasks
+echo "Creating task chain: 404 → 405 → 406"
+pueue add --group subissues --label "subissue-404" "echo 'Task 404: Base task'"
+task_404=$(pueue status --json | jq -r '.tasks | to_entries | last | .value.id')
+
+pueue add --group subissues --label "subissue-405" --after $task_404 "echo 'Task 405: Depends on 404'"
+task_405=$(pueue status --json | jq -r '.tasks | to_entries | last | .value.id')
+
+pueue add --group subissues --label "subissue-406" --after $task_405 "echo 'Task 406: Depends on 405'"
+
+echo -e "${GREEN}✓ Created dependency chain${NC}"
+echo "Task 405 will only start after 404 completes"
+echo "Task 406 will only start after 405 completes"
+
+echo
+echo -e "${GREEN}=== Demo 3: Pause and Resume ===${NC}"
+
+# Demonstrate pause/resume
+echo "Pausing all workers..."
+pueue pause --group subissues
+echo -e "${YELLOW}⏸  Workers paused${NC}"
+
+wait_with_progress 3 "Waiting"
+
+echo "Resuming workers..."
+pueue start --group subissues
+echo -e "${GREEN}▶  Workers resumed${NC}"
+
+echo
+echo -e "${GREEN}=== Demo 4: Worker Visibility ===${NC}"
+
+echo "Workers are running in tmux panes where you can see Claude working!"
+echo
+echo -e "${MAGENTA}Key Commands:${NC}"
+echo "  View workers:     tmux attach -t claude-workers"
+echo "  Monitor status:   ./tools/queue-pueue monitor"
+echo "  Pueue status:     pueue status --group subissues"
+echo "  Follow a task:    pueue follow <task-id>"
+echo "  Pause workers:    pueue pause --group subissues"
+echo "  Clean completed:  pueue clean --group subissues"
+
+echo
+echo -e "${GREEN}=== Demo 5: Advanced Scheduling ===${NC}"
+
+# Delayed execution
+echo "Scheduling a task for 30 seconds from now..."
+pueue add --group subissues --label "subissue-407" --delay "30s" "echo 'This ran after 30 seconds!'"
+echo -e "${GREEN}✓ Task scheduled for delayed execution${NC}"
+
+# Show final status
+echo
+echo -e "${BLUE}=== Current System Status ===${NC}"
+echo
+echo "File Queue:"
+~/Documents/repo/claude-code-tools/tools/queue status | head -10
+echo
+echo "Pueue Tasks:"
+pueue status --group subissues | grep -E "(Task|subissue)" | head -10
+
+echo
+echo -e "${GREEN}=== Demo Complete! ===${NC}"
+echo
+echo -e "${YELLOW}To see workers in action:${NC}"
+echo "  tmux attach -t claude-workers"
+echo
+echo -e "${YELLOW}To add real work:${NC}"
+echo "  ./tools/analyze 123  # Analyze issue #123"
+echo "  ./tools/queue-pueue sync  # Sync to Pueue"
+echo
+echo "The hybrid architecture combines the best of both worlds!"

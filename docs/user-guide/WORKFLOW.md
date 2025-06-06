@@ -1,4 +1,4 @@
-# Claude Code Tools Workflow Guide
+# Claude Code Parallel Workflow Guide
 
 ## 🚀 Quick Start Workflow
 
@@ -12,7 +12,7 @@
 # 3. Add more work as needed
 /project:add 125,126
 
-# 4. Stop when done
+# 4. Stop when done (gracefully via Pueue)
 /project:stop
 ```
 
@@ -32,7 +32,8 @@ curl -fsSL https://raw.githubusercontent.com/hikarubw/claude-code-tools/main/ins
 # Claude will:
 # - Analyze each issue
 # - Create 2-5 subissues per parent
-# - Start 4 workers processing the queue
+# - Queue tasks in Pueue
+# - Start 4 workers via Pueue+Tmux
 # - Create PRs automatically
 ```
 
@@ -167,40 +168,48 @@ worker logs 3  # Check specific worker
 
 ### Workers Not Picking Up Tasks
 ```bash
-# Check queue status
-queue status
+# Check Pueue queue status
+pueue status
 
-# Check worker status
-worker status
+# Check specific worker
+pueue log <task-id>
 
 # Restart stuck worker
-worker logs 5        # Identify issue
-tmux kill-session -t worker-5
-worker add 1         # Start replacement
+pueue restart <task-id>
+
+# Or kill and recreate
+pueue kill <task-id>
+/project:add-worker
 ```
 
 ### Queue Issues
 ```bash
-# Check for failed items
-queue status
+# Check full Pueue status
+pueue status --json
 
-# Retry failed subissues
-queue retry all
+# View failed tasks
+pueue status | grep Failed
 
-# Check specific parent issue
-queue by-parent 100
+# Retry failed tasks
+pueue restart <task-id>
+
+# Clean finished tasks
+pueue clean
 ```
 
 ### Performance Issues
 ```bash
-# Check worker health
-worker health
+# Check system load
+pueue status
 
-# Reduce workers if system is slow
-worker stop 4
+# Pause all tasks
+pueue pause
 
-# Clean old completed items
-queue clean 7  # Remove items older than 7 days
+# Resume specific group
+pueue start --group workers
+
+# Adjust parallelism
+pueue parallel 4
 ```
 
 ## 📊 Best Practices
