@@ -109,25 +109,8 @@ add_subissue() {
 
 # Monitor and display unified status
 monitor() {
-    while true; do
-        clear
-        echo "=== Hybrid Queue Status (File + Pueue) ==="
-        echo
-        
-        # Show Pueue tasks
-        echo "Pueue Tasks:"
-        pueue status --group "$PUEUE_GROUP"
-        
-        echo
-        echo "File Queue Status:"
-        "$SCRIPT_DIR/queue" status
-        
-        echo
-        echo "Workers in Tmux:"
-        tmux list-panes -t claude-workers -F "Pane #{pane_index}: #{pane_current_command}" 2>/dev/null || echo "No worker session"
-        
-        sleep 2
-    done
+    # Use the new unified monitor for comprehensive dashboard
+    "$SCRIPT_DIR/unified-monitor" monitor
 }
 
 # Clean completed tasks

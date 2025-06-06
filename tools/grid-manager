@@ -29,8 +29,8 @@ create_grid() {
     tmux new-session -d -s "$SESSION"
     tmux set -t "$SESSION" mouse on
     
-    # Start monitor in first pane
-    tmux send-keys -t "$SESSION:0.0" "$SCRIPT_DIR/queue-pueue monitor" C-m
+    # Start unified monitor in first pane
+    tmux send-keys -t "$SESSION:0.0" "$SCRIPT_DIR/unified-monitor monitor" C-m
     
     # Create worker panes
     for i in $(seq 1 $workers); do
