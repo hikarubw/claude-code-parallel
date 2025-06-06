@@ -1,6 +1,6 @@
 #!/bin/bash
-# Setup script for hybrid Pueue + Tmux architecture
-# Implements the revolutionary approach from ADR-003
+# Setup hybrid Pueue + Tmux architecture
+# Revolutionary approach combining the best of both worlds!
 
 set -e
 
@@ -15,100 +15,103 @@ RED='\033[0;31m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Default configuration
+DEFAULT_WORKERS=4
+SESSION="claude-workers"
+PUEUE_GROUP="subissues"
+
 echo -e "${BLUE}=== Claude Code Tools Hybrid Architecture Setup ===${NC}"
 echo "This implements the hybrid Pueue + Tmux approach from ADR-003"
-echo
+echo ""
+
+# Show usage for specific commands
+case "${1:-}" in
+    help|--help|-h)
+        cat << EOF
+Usage: setup-hybrid [workers] [demo]
+
+Examples:
+  setup-hybrid        # Setup with 4 workers
+  setup-hybrid 8      # Setup with 8 workers
+  setup-hybrid demo   # Setup with demo data
+  setup-hybrid clean  # Clean everything
+
+This script sets up the revolutionary hybrid architecture:
+- Pueue for professional queue management
+- Tmux for Claude visibility
+- Auto-approval continues to work
+- Best of both worlds!
+EOF
+        exit 0
+        ;;
+    
+    clean)
+        echo "Cleaning hybrid setup..."
+        tmux kill-session -t "$SESSION" 2>/dev/null || true
+        pueue clean --group "$PUEUE_GROUP" 2>/dev/null || true
+        pueue reset --force 2>/dev/null || true
+        echo -e "${GREEN}✓ Cleanup complete${NC}"
+        exit 0
+        ;;
+esac
 
 # Check dependencies
 check_dependencies() {
     echo "Checking dependencies..."
-    local failed=false
+    local missing=0
     
     # Check tmux
-    if ! command -v tmux &> /dev/null; then
-        echo -e "${RED}Error: tmux not installed${NC}"
-        echo "Install with: brew install tmux"
-        failed=true
-    else
+    if command -v tmux >/dev/null 2>&1; then
         echo -e "${GREEN}✓ tmux found: $(tmux -V)${NC}"
+    else
+        echo -e "${RED}✗ tmux not found${NC}"
+        ((missing++))
     fi
     
-    # Check Pueue
-    if ! command -v pueue &> /dev/null; then
-        echo -e "${YELLOW}Pueue not installed. Installing...${NC}"
-        
-        if command -v brew &> /dev/null; then
-            if brew install pueue; then
-                echo -e "${GREEN}✓ Pueue installed successfully${NC}"
-            else
-                echo -e "${RED}Error: Failed to install Pueue${NC}"
-                failed=true
-            fi
-        elif command -v cargo &> /dev/null; then
-            if cargo install pueue; then
-                echo -e "${GREEN}✓ Pueue installed successfully${NC}"
-            else
-                echo -e "${RED}Error: Failed to install Pueue${NC}"
-                failed=true
-            fi
-        else
-            echo -e "${RED}Error: Cannot automatically install Pueue${NC}"
-            echo -e "${YELLOW}Neither Homebrew nor Cargo package manager found.${NC}"
-            echo ""
-            echo "Please install Pueue manually using one of:"
-            echo -e "  ${GREEN}brew install pueue${NC}     (if you have Homebrew)"
-            echo -e "  ${GREEN}cargo install pueue${NC}    (if you have Rust/Cargo)"
-            echo -e "  ${GREEN}Download from: https://github.com/Nukesor/pueue/releases${NC}"
-            failed=true
-        fi
+    # Check pueue
+    if command -v pueue >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ pueue found: $(pueue --version | head -1)${NC}"
     else
-        echo -e "${GREEN}✓ pueue found: $(pueue --version)${NC}"
+        echo -e "${RED}✗ pueue not found${NC}"
+        echo "Install with: brew install pueue"
+        ((missing++))
     fi
     
     # Check jq
-    if ! command -v jq &> /dev/null; then
-        echo -e "${YELLOW}jq not installed. Installing...${NC}"
-        if brew install jq; then
-            echo -e "${GREEN}✓ jq installed successfully${NC}"
-        else
-            echo -e "${RED}Error: Failed to install jq${NC}"
-            echo "Install manually with: brew install jq"
-            failed=true
-        fi
-    else
+    if command -v jq >/dev/null 2>&1; then
         echo -e "${GREEN}✓ jq found: $(jq --version)${NC}"
+    else
+        echo -e "${RED}✗ jq not found${NC}"
+        echo "Install with: brew install jq"
+        ((missing++))
     fi
     
     # Check git
-    if ! command -v git &> /dev/null; then
-        echo -e "${RED}Error: git not installed${NC}"
-        failed=true
+    if command -v git >/dev/null 2>&1; then
+        echo -e "${GREEN}✓ git found: $(git --version)${NC}"
     else
-        echo -e "${GREEN}✓ git found: $(git --version | head -n1)${NC}"
+        echo -e "${RED}✗ git not found${NC}"
+        ((missing++))
     fi
     
     # Check if we're in a git repository
-    if ! git rev-parse --git-dir > /dev/null 2>&1; then
-        echo -e "${RED}Error: Not in a git repository${NC}"
-        echo -e "${YELLOW}This tool needs to be run from within a git repository.${NC}"
-        echo ""
-        echo "Please either:"
-        echo "  1. Navigate to your project directory: cd /path/to/your/project"
-        echo "  2. Initialize a git repository: git init"
-        failed=true
+    if git rev-parse --git-dir > /dev/null 2>&1; then
+        local repo_name=$(basename $(git rev-parse --show-toplevel))
+        echo -e "${GREEN}✓ In git repository: $repo_name${NC}"
     else
-        echo -e "${GREEN}✓ In git repository: $(basename $(git rev-parse --show-toplevel))${NC}"
+        echo -e "${RED}✗ Not in a git repository${NC}"
+        ((missing++))
     fi
     
-    if [ "$failed" = true ]; then
-        echo -e "${RED}\nDependency check failed. Please install missing dependencies.${NC}"
+    if [ $missing -gt 0 ]; then
+        echo -e "${RED}Missing $missing dependencies. Please install them first.${NC}"
         exit 1
     fi
     
     echo -e "${GREEN}✓ All dependencies satisfied${NC}"
 }
 
-# Start Pueue daemon
+# Start pueue daemon
 start_pueue() {
     echo "Starting Pueue daemon..."
     
@@ -116,21 +119,17 @@ start_pueue() {
         echo -e "${GREEN}✓ Pueue daemon already running${NC}"
     else
         pueued -d
-        sleep 2
-        
+        sleep 1
         if pueue status &>/dev/null; then
             echo -e "${GREEN}✓ Pueue daemon started${NC}"
         else
-            echo -e "${RED}Error: Failed to start Pueue daemon${NC}"
+            echo -e "${RED}✗ Failed to start Pueue daemon${NC}"
             exit 1
         fi
     fi
     
-    # Get the directory of this script
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    
     # Initialize subissues group
-    "$SCRIPT_DIR/pueue-wrapper" init
+    "$SCRIPT_DIR/queue-pueue" init
 }
 
 # Create hybrid worker session
@@ -140,47 +139,35 @@ create_worker_session() {
     echo -e "${BLUE}Creating hybrid worker session with $workers workers...${NC}"
     
     # Kill existing session if exists
-    tmux kill-session -t claude-workers 2>/dev/null || true
+    tmux kill-session -t "$SESSION" 2>/dev/null || true
     
-    # Create new session with grid layout
-    "$SCRIPT_DIR/grid-manager" create $workers
+    # Create new session
+    tmux new-session -d -s "$SESSION"
     
-    # Update each worker pane to run hybrid-worker
-    for i in $(seq 1 $workers); do
-        tmux send-keys -t "claude-workers:0.$i" C-c 2>/dev/null || true
-        sleep 0.5
-        tmux send-keys -t "claude-workers:0.$i" "clear" C-m
-        tmux send-keys -t "claude-workers:0.$i" "$SCRIPT_DIR/hybrid-worker $i" C-m
+    # Create monitor pane (pane 0) and start monitor
+    tmux send-keys -t "$SESSION:0.0" "$SCRIPT_DIR/worker-monitor" C-m
+    
+    # Create worker panes
+    for ((i=1; i<=workers; i++)); do
+        tmux split-window -t "$SESSION"
+        tmux send-keys -t "$SESSION:0.$i" "$SCRIPT_DIR/hybrid-worker $i" C-m
     done
     
-    # Update monitor pane
-    tmux send-keys -t "claude-workers:0.0" C-c 2>/dev/null || true
-    sleep 0.5
-    tmux send-keys -t "claude-workers:0.0" "$SCRIPT_DIR/pueue-wrapper monitor" C-m
+    # Balance the layout
+    tmux select-layout -t "$SESSION" tiled
     
     echo -e "${GREEN}✓ Hybrid worker session created${NC}"
 }
 
-# Migrate existing queue
-migrate_queue() {
-    echo "Migrating existing queue to hybrid architecture..."
-    
-    # Migration is no longer needed with pure Pueue backend
-    echo "Using pure Pueue backend - no migration needed"
-}
-
-# Setup auto-approval for hybrid
+# Setup auto-approval
 setup_auto_approval() {
-    echo "Configuring auto-approval for hybrid architecture..."
-    
-    # The existing auto-approval works perfectly with hybrid!
-    # It monitors tmux panes where Claude runs
+    echo "Configuring auto-approval..."
     
     if pgrep -f "auto-approve" > /dev/null; then
         echo -e "${GREEN}✓ Auto-approval already running${NC}"
     else
-        echo "Start auto-approval with: ./tools/auto-approve &"
-        echo -e "${YELLOW}Note: Auto-approval works seamlessly with hybrid architecture${NC}"
+        echo "Start auto-approval with: ./tools/auto-approve start &"
+        echo -e "${YELLOW}Note: Auto-approval works with hybrid architecture${NC}"
     fi
 }
 
@@ -189,11 +176,11 @@ create_demo() {
     echo -e "${BLUE}Creating demo subissues...${NC}"
     
     # Add some test subissues
-    "$SCRIPT_DIR/pueue-wrapper" add 1 "123" "301"
-    "$SCRIPT_DIR/pueue-wrapper" add 2 "123" "302"
-    "$SCRIPT_DIR/pueue-wrapper" add 3 "124" "303"
+    "$SCRIPT_DIR/queue-pueue" add 1 "123" "301"
+    "$SCRIPT_DIR/queue-pueue" add 2 "123" "302"
+    "$SCRIPT_DIR/queue-pueue" add 3 "124" "303"
     
-    echo -e "${GREEN}✓ Demo subissues added to hybrid queue${NC}"
+    echo -e "${GREEN}✓ Demo subissues added${NC}"
 }
 
 # Show usage
@@ -202,20 +189,20 @@ show_usage() {
 ${BLUE}Hybrid Architecture Quick Start:${NC}
 
 1. View worker session:
-   tmux attach -t claude-workers
+   tmux attach -t $SESSION
 
 2. Add subissues:
-   ./tools/pueue-wrapper add <priority> <parent> <subissue>
+   ./tools/queue-pueue add <priority> <parent> <subissue>
 
 3. Monitor status:
-   ./tools/pueue-wrapper monitor
+   ./tools/worker-monitor
 
 4. View Pueue status:
-   pueue status --group subissues
+   pueue status --group $PUEUE_GROUP
 
 5. Pause/resume processing:
-   pueue pause --group subissues
-   pueue start --group subissues
+   pueue pause --group $PUEUE_GROUP
+   pueue start --group $PUEUE_GROUP
 
 ${YELLOW}Key Benefits:${NC}
 - Pueue provides persistence and crash recovery
@@ -235,7 +222,6 @@ main() {
     check_dependencies
     start_pueue
     create_worker_session "$workers"
-    migrate_queue
     setup_auto_approval
     
     if [ "$demo" = "demo" ]; then
@@ -246,25 +232,21 @@ main() {
     echo -e "${GREEN}=== Hybrid Architecture Setup Complete! ===${NC}"
     echo
     
-    # Final verification
+    # Verify setup
     echo "Verifying setup..."
-    if tmux has-session -t claude-workers 2>/dev/null; then
-        echo -e "${GREEN}✓ Tmux session 'claude-workers' is active${NC}"
-    else
-        echo -e "${YELLOW}⚠ Warning: Tmux session may not be fully initialized${NC}"
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+        echo -e "${GREEN}✓ Tmux session '$SESSION' is active${NC}"
     fi
     
-    if pueue status --group subissues &>/dev/null; then
-        echo -e "${GREEN}✓ Pueue group 'subissues' is ready${NC}"
-    else
-        echo -e "${YELLOW}⚠ Warning: Pueue group may not be fully initialized${NC}"
+    if pueue status --group "$PUEUE_GROUP" &>/dev/null; then
+        echo -e "${GREEN}✓ Pueue group '$PUEUE_GROUP' is ready${NC}"
     fi
     
     echo
     show_usage
     
     echo
-    echo -e "${BLUE}Attach to session with:${NC} tmux attach -t claude-workers"
+    echo -e "${BLUE}Attach to session with:${NC} tmux attach -t $SESSION"
 }
 
 # Handle command line args
@@ -279,28 +261,15 @@ case "${1:-help}" in
         main 4 demo
         ;;
     
-    clean)
-        # Clean everything
-        echo "Cleaning hybrid setup..."
-        tmux kill-session -t claude-workers 2>/dev/null || true
-        pueue clean --group subissues 2>/dev/null || true
-        pueue reset --force 2>/dev/null || true
-        echo -e "${GREEN}✓ Cleanup complete${NC}"
+    "")
+        # Default setup
+        main
         ;;
     
     *)
-        echo "Usage: setup-hybrid [workers] [demo]"
-        echo ""
-        echo "Examples:"
-        echo "  setup-hybrid        # Setup with 4 workers"
-        echo "  setup-hybrid 8      # Setup with 8 workers"  
-        echo "  setup-hybrid demo   # Setup with demo data"
-        echo "  setup-hybrid clean  # Clean everything"
-        echo ""
-        echo "This script sets up the revolutionary hybrid architecture:"
-        echo "- Pueue for professional queue management"
-        echo "- Tmux for Claude visibility"
-        echo "- Auto-approval continues to work"
-        echo "- Best of both worlds!"
+        # Unknown command already handled above
+        echo -e "${RED}Unknown command: $1${NC}"
+        echo "Use: setup-hybrid --help"
+        exit 1
         ;;
 esac
