@@ -1,0 +1,536 @@
+#!/bin/bash
+# Unified monitoring dashboard for hybrid architecture
+# Provides comprehensive real-time status of queue, workers, and tasks
+
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Configuration
+QUEUE_FILE="$HOME/.claude/queue/queue.txt"
+COMPLETED_FILE="$HOME/.claude/queue/completed.txt"
+FAILED_FILE="$HOME/.claude/queue/failed.txt"
+SESSION="claude-workers"
+PUEUE_GROUP="subissues"
+REFRESH_RATE=${REFRESH_RATE:-2}
+
+# Colors
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+MAGENTA='\033[0;35m'
+BOLD='\033[1m'
+NC='\033[0m'
+
+# Unicode characters for visual elements
+CHECK="✓"
+CROSS="✗"
+ARROW="→"
+WORKING="⚙"
+PENDING="⏳"
+COMPLETED="✅"
+FAILED="❌"
+
+# Terminal dimensions
+get_terminal_size() {
+    COLS=$(tput cols)
+    LINES=$(tput lines)
+}
+
+# Draw a horizontal line
+draw_line() {
+    local char="${1:-─}"
+    printf '%*s\n' "${COLS}" '' | tr ' ' "$char"
+}
+
+# Center text
+center_text() {
+    local text="$1"
+    local width=${2:-$COLS}
+    local text_len=${#text}
+    local padding=$(( (width - text_len) / 2 ))
+    printf "%*s%s%*s" $padding '' "$text" $padding ''
+}
+
+# Get queue statistics
+get_queue_stats() {
+    if [[ -f "$QUEUE_FILE" ]]; then
+        QUEUE_PENDING=$(grep -c "|pending||" "$QUEUE_FILE" 2>/dev/null || echo 0)
+        QUEUE_WORKING=$(grep -c "|working|" "$QUEUE_FILE" 2>/dev/null || echo 0)
+    else
+        QUEUE_PENDING=0
+        QUEUE_WORKING=0
+    fi
+    
+    if [[ -f "$COMPLETED_FILE" ]]; then
+        QUEUE_COMPLETED=$(wc -l < "$COMPLETED_FILE" | tr -d ' ')
+    else
+        QUEUE_COMPLETED=0
+    fi
+    
+    if [[ -f "$FAILED_FILE" ]]; then
+        QUEUE_FAILED=$(wc -l < "$FAILED_FILE" | tr -d ' ')
+    else
+        QUEUE_FAILED=0
+    fi
+    
+    QUEUE_TOTAL=$((QUEUE_PENDING + QUEUE_WORKING + QUEUE_COMPLETED + QUEUE_FAILED))
+}
+
+# Get Pueue statistics
+get_pueue_stats() {
+    if ! pueue status &>/dev/null; then
+        PUEUE_RUNNING=false
+        return
+    fi
+    
+    PUEUE_RUNNING=true
+    PUEUE_JSON=$(pueue status --json --group "$PUEUE_GROUP" 2>/dev/null || echo '{}')
+    
+    PUEUE_QUEUED=$(echo "$PUEUE_JSON" | jq '[.tasks[] | select(.status == "Queued")] | length' 2>/dev/null || echo 0)
+    PUEUE_RUNNING_COUNT=$(echo "$PUEUE_JSON" | jq '[.tasks[] | select(.status == "Running")] | length' 2>/dev/null || echo 0)
+    PUEUE_SUCCESS=$(echo "$PUEUE_JSON" | jq '[.tasks[] | select(.status == "Success")] | length' 2>/dev/null || echo 0)
+    PUEUE_FAILED=$(echo "$PUEUE_JSON" | jq '[.tasks[] | select(.status == "Failed" or .status == "Killed")] | length' 2>/dev/null || echo 0)
+}
+
+# Get tmux worker status
+get_tmux_workers() {
+    if ! tmux has-session -t "$SESSION" 2>/dev/null; then
+        TMUX_RUNNING=false
+        WORKER_COUNT=0
+        return
+    fi
+    
+    TMUX_RUNNING=true
+    TMUX_PANES=$(tmux list-panes -t "$SESSION" -F '#{pane_index}:#{pane_current_command}' 2>/dev/null || echo "")
+    if [[ -n "$TMUX_PANES" ]]; then
+        WORKER_COUNT=$(($(echo "$TMUX_PANES" | wc -l) - 1))  # Subtract monitor pane
+        [[ $WORKER_COUNT -lt 0 ]] && WORKER_COUNT=0
+    else
+        WORKER_COUNT=0
+    fi
+}
+
+# Calculate metrics
+calculate_metrics() {
+    # Average completion time
+    if [[ -f "$COMPLETED_FILE" ]] && [[ -s "$COMPLETED_FILE" ]]; then
+        local total_time=0
+        local count=0
+        
+        while IFS='|' read -r _ _ _ _ _ created completed; do
+            if [[ -n "$created" ]] && [[ -n "$completed" ]]; then
+                # Convert to epoch seconds
+                created_epoch=$(date -d "$created" +%s 2>/dev/null || echo 0)
+                completed_epoch=$(date -d "$completed" +%s 2>/dev/null || echo 0)
+                
+                if [[ $created_epoch -gt 0 ]] && [[ $completed_epoch -gt 0 ]]; then
+                    time_diff=$((completed_epoch - created_epoch))
+                    total_time=$((total_time + time_diff))
+                    ((count++))
+                fi
+            fi
+        done < "$COMPLETED_FILE"
+        
+        if [[ $count -gt 0 ]]; then
+            AVG_COMPLETION_TIME=$((total_time / count / 60))  # In minutes
+        else
+            AVG_COMPLETION_TIME=0
+        fi
+    else
+        AVG_COMPLETION_TIME=0
+    fi
+    
+    # Success rate
+    if [[ $QUEUE_COMPLETED -gt 0 ]] || [[ $QUEUE_FAILED -gt 0 ]]; then
+        SUCCESS_RATE=$(( QUEUE_COMPLETED * 100 / (QUEUE_COMPLETED + QUEUE_FAILED) ))
+    else
+        SUCCESS_RATE=0
+    fi
+    
+    # Throughput (last hour)
+    if [[ -f "$COMPLETED_FILE" ]]; then
+        HOUR_AGO=$(date -u -d "1 hour ago" +%Y-%m-%dT%H:%M:%SZ)
+        HOURLY_COMPLETED=$(awk -F'|' -v cutoff="$HOUR_AGO" '$7 > cutoff' "$COMPLETED_FILE" | wc -l)
+    else
+        HOURLY_COMPLETED=0
+    fi
+}
+
+# Draw header
+draw_header() {
+    clear
+    get_terminal_size
+    
+    echo -e "${BOLD}${CYAN}"
+    draw_line "═"
+    center_text "CLAUDE CODE PARALLEL - UNIFIED MONITOR"
+    echo
+    center_text "$(date '+%Y-%m-%d %H:%M:%S')"
+    draw_line "═"
+    echo -e "${NC}"
+}
+
+# Draw system status section
+draw_system_status() {
+    echo -e "${BOLD}${BLUE}📊 SYSTEM STATUS${NC}"
+    draw_line
+    
+    # Pueue status
+    if [[ "$PUEUE_RUNNING" == "true" ]]; then
+        echo -e "Pueue Daemon: ${GREEN}${COMPLETED} Running${NC}"
+    else
+        echo -e "Pueue Daemon: ${RED}${FAILED} Not Running${NC}"
+    fi
+    
+    # Tmux session status
+    if [[ "$TMUX_RUNNING" == "true" ]]; then
+        echo -e "Tmux Session: ${GREEN}${COMPLETED} Active (${WORKER_COUNT} workers)${NC}"
+    else
+        echo -e "Tmux Session: ${RED}${FAILED} No Session${NC}"
+    fi
+    
+    echo
+}
+
+# Draw queue overview with visual bar
+draw_queue_overview() {
+    echo -e "${BOLD}${MAGENTA}📈 QUEUE OVERVIEW${NC}"
+    draw_line
+    
+    # Visual progress bar
+    if [[ $QUEUE_TOTAL -gt 0 ]]; then
+        local bar_width=$((COLS - 20))
+        local completed_width=$((QUEUE_COMPLETED * bar_width / QUEUE_TOTAL))
+        local working_width=$((QUEUE_WORKING * bar_width / QUEUE_TOTAL))
+        local pending_width=$((QUEUE_PENDING * bar_width / QUEUE_TOTAL))
+        local failed_width=$((QUEUE_FAILED * bar_width / QUEUE_TOTAL))
+        
+        printf "Progress: ["
+        
+        # Completed (green)
+        [[ $completed_width -gt 0 ]] && printf "${GREEN}%*s${NC}" $completed_width '' | tr ' ' '█'
+        
+        # Working (yellow)
+        [[ $working_width -gt 0 ]] && printf "${YELLOW}%*s${NC}" $working_width '' | tr ' ' '▓'
+        
+        # Pending (blue)
+        [[ $pending_width -gt 0 ]] && printf "${BLUE}%*s${NC}" $pending_width '' | tr ' ' '▒'
+        
+        # Failed (red)
+        [[ $failed_width -gt 0 ]] && printf "${RED}%*s${NC}" $failed_width '' | tr ' ' '░'
+        
+        # Fill remaining space
+        local used=$((completed_width + working_width + pending_width + failed_width))
+        local remaining=$((bar_width - used))
+        [[ $remaining -gt 0 ]] && printf "%*s" $remaining ''
+        
+        printf "] %d%%\n" $((QUEUE_COMPLETED * 100 / QUEUE_TOTAL))
+    else
+        echo "Progress: [No tasks]"
+    fi
+    
+    echo
+    
+    # Stats table
+    printf "%-15s %-10s %-15s %-10s\n" \
+        "${GREEN}${COMPLETED} Completed:${NC}" "$QUEUE_COMPLETED" \
+        "${YELLOW}${WORKING} Working:${NC}" "$QUEUE_WORKING"
+    
+    printf "%-15s %-10s %-15s %-10s\n" \
+        "${BLUE}${PENDING} Pending:${NC}" "$QUEUE_PENDING" \
+        "${RED}${FAILED} Failed:${NC}" "$QUEUE_FAILED"
+    
+    echo
+}
+
+# Draw active workers section
+draw_active_workers() {
+    echo -e "${BOLD}${YELLOW}👷 ACTIVE WORKERS${NC}"
+    draw_line
+    
+    if [[ "$TMUX_RUNNING" == "true" ]] && [[ -n "$TMUX_PANES" ]]; then
+        # Get current working tasks
+        local worker_tasks=""
+        if [[ -f "$QUEUE_FILE" ]]; then
+            worker_tasks=$(grep "|working|" "$QUEUE_FILE" 2>/dev/null || echo "")
+        fi
+        
+        echo "$TMUX_PANES" | while IFS=':' read -r pane_idx pane_cmd; do
+            if [[ $pane_idx -eq 0 ]]; then
+                continue  # Skip monitor pane
+            fi
+            
+            # Extract worker ID
+            if [[ "$pane_cmd" =~ hybrid-worker[[:space:]]+([0-9]+) ]]; then
+                local worker_id="${BASH_REMATCH[1]}"
+                printf "Worker-%d: " "$worker_id"
+                
+                # Find task for this worker
+                local task_info=$(echo "$worker_tasks" | grep "|worker-$worker_id|" | tail -1)
+                if [[ -n "$task_info" ]]; then
+                    local subissue=$(echo "$task_info" | cut -d'|' -f3)
+                    local parent=$(echo "$task_info" | cut -d'|' -f2)
+                    echo -e "${GREEN}${WORKING} Working${NC} on subissue #$subissue (parent #$parent)"
+                else
+                    echo -e "${CYAN}${PENDING} Idle${NC} - waiting for tasks"
+                fi
+            else
+                printf "Pane %d: %s\n" "$pane_idx" "$pane_cmd"
+            fi
+        done
+    else
+        echo "No active workers"
+    fi
+    
+    echo
+}
+
+# Draw metrics section
+draw_metrics() {
+    echo -e "${BOLD}${CYAN}📊 PERFORMANCE METRICS${NC}"
+    draw_line
+    
+    printf "%-30s %-20s\n" "Average Completion Time:" "${AVG_COMPLETION_TIME} minutes"
+    printf "%-30s %-20s\n" "Success Rate:" "${SUCCESS_RATE}%"
+    printf "%-30s %-20s\n" "Completed (last hour):" "$HOURLY_COMPLETED tasks"
+    
+    # Calculate throughput
+    if [[ $HOURLY_COMPLETED -gt 0 ]]; then
+        local throughput=$(( 60 / (HOURLY_COMPLETED + 1) ))  # Minutes per task
+        printf "%-30s %-20s\n" "Current Throughput:" "~${throughput} min/task"
+    fi
+    
+    echo
+}
+
+# Draw recent activity
+draw_recent_activity() {
+    echo -e "${BOLD}${GREEN}🔄 RECENT ACTIVITY${NC}"
+    draw_line
+    
+    # Show last 5 completed tasks
+    if [[ -f "$COMPLETED_FILE" ]] && [[ -s "$COMPLETED_FILE" ]]; then
+        echo "Recently Completed:"
+        tail -5 "$COMPLETED_FILE" | while IFS='|' read -r _ parent subissue _ _ _ completed; do
+            local completed_time=$(date -d "$completed" '+%H:%M:%S' 2>/dev/null || echo "unknown")
+            echo -e "  ${GREEN}${CHECK}${NC} #$subissue (parent #$parent) at $completed_time"
+        done
+    else
+        echo "No completed tasks yet"
+    fi
+    
+    # Show failed tasks if any
+    if [[ -f "$FAILED_FILE" ]] && [[ -s "$FAILED_FILE" ]]; then
+        echo
+        echo "Failed Tasks:"
+        tail -3 "$FAILED_FILE" | while IFS='|' read -r _ parent subissue _ _ _ failed; do
+            echo -e "  ${RED}${CROSS}${NC} #$subissue (parent #$parent)"
+        done
+    fi
+    
+    echo
+}
+
+# Draw footer with help
+draw_footer() {
+    draw_line "─"
+    echo -e "${BOLD}Commands:${NC} q=quit | r=refresh | w=workers view | p=pueue view | Refreshing every ${REFRESH_RATE}s"
+}
+
+# Main monitoring loop
+monitor_loop() {
+    # Hide cursor
+    tput civis
+    
+    # Restore cursor on exit
+    trap 'tput cnorm; exit' INT TERM
+    
+    while true; do
+        # Gather all stats
+        get_queue_stats
+        get_pueue_stats
+        get_tmux_workers
+        calculate_metrics
+        
+        # Draw dashboard
+        draw_header
+        draw_system_status
+        draw_queue_overview
+        draw_active_workers
+        draw_metrics
+        draw_recent_activity
+        draw_footer
+        
+        # Wait for input or timeout
+        if read -t "$REFRESH_RATE" -n 1 key; then
+            case "$key" in
+                q|Q)
+                    tput cnorm
+                    exit 0
+                    ;;
+                r|R)
+                    continue
+                    ;;
+                w|W)
+                    # Switch to tmux view
+                    if [[ "$TMUX_RUNNING" == "true" ]]; then
+                        tput cnorm
+                        tmux attach -t "$SESSION"
+                        tput civis
+                    fi
+                    ;;
+                p|P)
+                    # Show pueue status
+                    tput cnorm
+                    pueue status --group "$PUEUE_GROUP"
+                    echo
+                    echo "Press any key to continue..."
+                    read -n 1
+                    tput civis
+                    ;;
+            esac
+        fi
+    done
+}
+
+# Debugging view
+debug_view() {
+    echo -e "${BOLD}${RED}🔍 DEBUG INFORMATION${NC}"
+    draw_line "═"
+    
+    echo "Configuration:"
+    echo "  QUEUE_FILE: $QUEUE_FILE"
+    echo "  SESSION: $SESSION"
+    echo "  PUEUE_GROUP: $PUEUE_GROUP"
+    echo
+    
+    echo "File Queue:"
+    if [[ -f "$QUEUE_FILE" ]]; then
+        echo "  Size: $(wc -l < "$QUEUE_FILE") lines"
+        echo "  Last modified: $(stat -c %y "$QUEUE_FILE" 2>/dev/null || stat -f %Sm "$QUEUE_FILE")"
+    else
+        echo "  File not found!"
+    fi
+    echo
+    
+    echo "Pueue Status:"
+    if pueue status &>/dev/null; then
+        pueue status --json | jq '{
+            total_tasks: .tasks | length,
+            by_status: .tasks | group_by(.status) | map({key: .[0].status, value: length}) | from_entries
+        }'
+    else
+        echo "  Pueue daemon not running"
+    fi
+    echo
+    
+    echo "Tmux Sessions:"
+    tmux list-sessions 2>/dev/null || echo "  No tmux sessions"
+    echo
+    
+    echo "Press any key to continue..."
+    read -n 1
+}
+
+# Main command handling
+case "${1:-monitor}" in
+    monitor|watch)
+        monitor_loop
+        ;;
+    
+    once|status)
+        # Single update without loop
+        get_queue_stats
+        get_pueue_stats
+        get_tmux_workers
+        calculate_metrics
+        
+        draw_header
+        draw_system_status
+        draw_queue_overview
+        draw_active_workers
+        draw_metrics
+        draw_recent_activity
+        ;;
+    
+    debug)
+        debug_view
+        ;;
+    
+    metrics)
+        # Just show metrics
+        get_queue_stats
+        calculate_metrics
+        
+        echo "Queue Metrics:"
+        echo "  Total Tasks: $QUEUE_TOTAL"
+        echo "  Completed: $QUEUE_COMPLETED"
+        echo "  Success Rate: ${SUCCESS_RATE}%"
+        echo "  Avg Completion: ${AVG_COMPLETION_TIME} min"
+        echo "  Hourly Rate: $HOURLY_COMPLETED tasks"
+        ;;
+    
+    json)
+        # Output as JSON for integration
+        get_queue_stats
+        get_pueue_stats
+        get_tmux_workers
+        calculate_metrics
+        
+        cat <<EOF
+{
+    "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+    "queue": {
+        "pending": $QUEUE_PENDING,
+        "working": $QUEUE_WORKING,
+        "completed": $QUEUE_COMPLETED,
+        "failed": $QUEUE_FAILED,
+        "total": $QUEUE_TOTAL
+    },
+    "workers": {
+        "active": $WORKER_COUNT,
+        "tmux_running": $TMUX_RUNNING
+    },
+    "metrics": {
+        "avg_completion_minutes": $AVG_COMPLETION_TIME,
+        "success_rate": $SUCCESS_RATE,
+        "hourly_completed": $HOURLY_COMPLETED
+    },
+    "pueue": {
+        "running": $PUEUE_RUNNING,
+        "queued": $PUEUE_QUEUED,
+        "running_count": $PUEUE_RUNNING_COUNT,
+        "success": $PUEUE_SUCCESS,
+        "failed": $PUEUE_FAILED
+    }
+}
+EOF
+        ;;
+    
+    help|*)
+        echo "Unified Monitor - Comprehensive dashboard for hybrid architecture"
+        echo
+        echo "Usage: unified-monitor [command]"
+        echo
+        echo "Commands:"
+        echo "  monitor, watch    - Live monitoring dashboard (default)"
+        echo "  once, status      - Show current status once"
+        echo "  debug             - Show debugging information"
+        echo "  metrics           - Show just the metrics"
+        echo "  json              - Output status as JSON"
+        echo
+        echo "Dashboard Controls:"
+        echo "  q - Quit"
+        echo "  r - Refresh immediately"
+        echo "  w - Switch to worker tmux view"
+        echo "  p - Show Pueue status"
+        echo
+        echo "Environment Variables:"
+        echo "  REFRESH_RATE - Update interval in seconds (default: 2)"
+        ;;
+esac

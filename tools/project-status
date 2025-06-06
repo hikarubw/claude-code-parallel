@@ -1,0 +1,251 @@
+#!/bin/bash
+# Enhanced project status command using unified monitor
+# Provides different views and options for monitoring
+
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Parse command line options
+WATCH_MODE=false
+VIEW_TYPE="all"
+VERBOSE=false
+FORMAT="terminal"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --watch|-w)
+            WATCH_MODE=true
+            shift
+            ;;
+        --workers)
+            VIEW_TYPE="workers"
+            shift
+            ;;
+        --queue)
+            VIEW_TYPE="queue"
+            shift
+            ;;
+        --issues)
+            VIEW_TYPE="issues"
+            shift
+            ;;
+        --verbose|-v)
+            VERBOSE=true
+            shift
+            ;;
+        --json)
+            FORMAT="json"
+            shift
+            ;;
+        --help|-h)
+            echo "Enhanced Project Status"
+            echo
+            echo "Usage: project-status [OPTIONS]"
+            echo
+            echo "Options:"
+            echo "  --watch, -w      Live updates (launches unified monitor)"
+            echo "  --workers        Show only worker status"
+            echo "  --queue          Show only queue status"
+            echo "  --issues         Show only parent issue progress"
+            echo "  --verbose, -v    Include detailed information"
+            echo "  --json           Output in JSON format"
+            echo "  --help, -h       Show this help"
+            echo
+            echo "Examples:"
+            echo "  project-status                  # Basic status"
+            echo "  project-status --watch          # Live monitoring"
+            echo "  project-status --queue --json   # Queue status as JSON"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# If watch mode, launch unified monitor
+if [[ "$WATCH_MODE" == "true" ]]; then
+    exec "$SCRIPT_DIR/unified-monitor" monitor
+fi
+
+# For JSON output, use unified monitor's JSON mode
+if [[ "$FORMAT" == "json" ]]; then
+    exec "$SCRIPT_DIR/unified-monitor" json
+fi
+
+# Otherwise, provide formatted terminal output based on view type
+case "$VIEW_TYPE" in
+    all)
+        # Show comprehensive status
+        "$SCRIPT_DIR/unified-monitor" once
+        ;;
+    
+    workers)
+        # Show only worker information
+        echo "👷 Worker Pool Status"
+        echo "===================="
+        
+        if tmux has-session -t claude-workers 2>/dev/null; then
+            # Get worker information
+            WORKER_INFO=$(tmux list-panes -t claude-workers -F '#{pane_index}:#{pane_current_command}' 2>/dev/null)
+            WORKER_COUNT=$(($(echo "$WORKER_INFO" | wc -l) - 1))
+            
+            echo "Active Workers: $WORKER_COUNT"
+            echo
+            
+            # Show each worker's status
+            while IFS='|' read -r _ _ subissue status worker _; do
+                if [[ "$status" == "working" ]] && [[ -n "$worker" ]]; then
+                    echo "$worker: Working on subissue #$subissue"
+                fi
+            done < "$HOME/.claude/queue/queue.txt"
+            
+            # Show idle workers
+            for i in $(seq 1 $WORKER_COUNT); do
+                if ! grep -q "worker-$i" "$HOME/.claude/queue/queue.txt"; then
+                    echo "worker-$i: Idle"
+                fi
+            done
+            
+            if [[ "$VERBOSE" == "true" ]]; then
+                echo
+                echo "Tmux Session Details:"
+                tmux list-panes -t claude-workers -F 'Pane #{pane_index}: #{pane_width}x#{pane_height}' 2>/dev/null
+            fi
+        else
+            echo "No active worker session"
+            echo
+            echo "Start workers with: /project:work ISSUES [WORKERS]"
+        fi
+        ;;
+    
+    queue)
+        # Show queue information
+        echo "📊 Queue Status"
+        echo "=============="
+        
+        # Get stats from unified monitor
+        STATS=$("$SCRIPT_DIR/unified-monitor" metrics)
+        echo "$STATS"
+        
+        if [[ "$VERBOSE" == "true" ]]; then
+            echo
+            echo "Queue Details:"
+            "$SCRIPT_DIR/queue" status
+        fi
+        ;;
+    
+    issues)
+        # Show parent issue progress
+        echo "📋 Parent Issue Progress"
+        echo "======================="
+        
+        QUEUE_FILE="$HOME/.claude/queue/queue.txt"
+        COMPLETED_FILE="$HOME/.claude/queue/completed.txt"
+        FAILED_FILE="$HOME/.claude/queue/failed.txt"
+        
+        # Collect unique parent issues and their counts
+        # Format: parent|total|completed|failed
+        TEMP_FILE=$(mktemp)
+        
+        # Process all files and collect data
+        {
+            # Active queue
+            if [[ -f "$QUEUE_FILE" ]]; then
+                awk -F'|' '{
+                    parent=$2
+                    status=$4
+                    if (status == "pending" || status == "working") {
+                        print parent "|active|0|0"
+                    } else if (status == "completed") {
+                        print parent "|completed|1|0"
+                    } else if (status == "failed") {
+                        print parent "|failed|0|1"
+                    }
+                }' "$QUEUE_FILE"
+            fi
+            
+            # Completed file
+            if [[ -f "$COMPLETED_FILE" ]]; then
+                awk -F'|' '{print $2 "|completed|1|0"}' "$COMPLETED_FILE"
+            fi
+            
+            # Failed file
+            if [[ -f "$FAILED_FILE" ]]; then
+                awk -F'|' '{print $2 "|failed|0|1"}' "$FAILED_FILE"
+            fi
+        } | sort | awk -F'|' '
+            {
+                parent=$1
+                totals[parent]++
+                completed[parent]+=$3
+                failed[parent]+=$4
+            }
+            END {
+                for (p in totals) {
+                    print p "|" totals[p] "|" completed[p] "|" failed[p]
+                }
+            }
+        ' > "$TEMP_FILE"
+        
+        # Display progress for each parent
+        if [[ -s "$TEMP_FILE" ]]; then
+            while IFS='|' read -r parent total completed failed; do
+                # Skip empty lines
+                [[ -z "$parent" ]] && continue
+                
+                percent=0
+                if [[ $total -gt 0 ]]; then
+                    percent=$((completed * 100 / total))
+                fi
+                
+                # Create progress bar
+                bar_width=20
+                filled=$((percent * bar_width / 100))
+                empty=$((bar_width - filled))
+                
+                printf "#%-5s: [" "$parent"
+                printf "%${filled}s" | tr ' ' '█'
+                printf "%${empty}s" | tr ' ' '░'
+                printf "] %3d%% (%d/%d)" "$percent" "$completed" "$total"
+                
+                if [[ $failed -gt 0 ]]; then
+                    printf " ⚠️  %d failed" "$failed"
+                fi
+                
+                if [[ $percent -eq 100 ]] && [[ $failed -eq 0 ]]; then
+                    printf " ✅"
+                fi
+                
+                echo
+            done < "$TEMP_FILE"
+        else
+            echo "No active issues being processed"
+        fi
+        
+        rm -f "$TEMP_FILE"
+        ;;
+esac
+
+# Add performance summary for non-JSON output
+if [[ "$FORMAT" != "json" ]] && [[ "$VIEW_TYPE" == "all" || "$VERBOSE" == "true" ]]; then
+    echo
+    echo "📈 Quick Stats"
+    echo "============="
+    
+    # Get JSON stats and parse key metrics
+    JSON_STATS=$("$SCRIPT_DIR/unified-monitor" json)
+    
+    SUCCESS_RATE=$(echo "$JSON_STATS" | jq -r '.metrics.success_rate')
+    AVG_TIME=$(echo "$JSON_STATS" | jq -r '.metrics.avg_completion_minutes')
+    HOURLY=$(echo "$JSON_STATS" | jq -r '.metrics.hourly_completed')
+    
+    echo "Success Rate: ${SUCCESS_RATE}%"
+    echo "Avg Completion: ${AVG_TIME} minutes"
+    echo "Last Hour: ${HOURLY} tasks completed"
+fi
