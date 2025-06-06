@@ -61,16 +61,19 @@ while true; do
     # Start the task in Pueue (marks it as running)
     pueue start $TASK_ID
     
-    # Get subissue details from our queue
-    QUEUE_ITEM=$("$SCRIPT_DIR/queue" get "subissue-$SUBISSUE_ID")
-    if [[ -z "$QUEUE_ITEM" ]]; then
-        echo -e "${RED}Error: Subissue $SUBISSUE_ID not found in queue${NC}"
+    # Get parent issue from Pueue task command
+    # The command format is: "echo '...' > ... && process_subissue SUBISSUE PARENT"
+    PARENT_ISSUE=$(pueue status --json | jq -r --arg id "$TASK_ID" '
+        .tasks[$id].command | 
+        capture("process_subissue [0-9]+ (?<parent>[0-9]+)") | 
+        .parent
+    ')
+    
+    if [[ -z "$PARENT_ISSUE" ]]; then
+        echo -e "${RED}Error: Could not extract parent issue for subissue $SUBISSUE_ID${NC}"
         pueue kill $TASK_ID
         continue
     fi
-    
-    # Parse queue item
-    PARENT_ISSUE=$(echo "$QUEUE_ITEM" | cut -d'|' -f2)
     
     echo -e "${GREEN}Processing subissue #$SUBISSUE_ID (parent: #$PARENT_ISSUE)${NC}"
     
@@ -98,9 +101,12 @@ while true; do
     # THIS IS THE KEY: Claude runs IN THIS TMUX PANE where we can see it!
     echo -e "${GREEN}Starting Claude in visible tmux pane...${NC}"
     
-    # Update queue status
-    "$SCRIPT_DIR/queue" update "subissue-$SUBISSUE_ID" status working
-    "$SCRIPT_DIR/queue" update "subissue-$SUBISSUE_ID" assigned_to "$WORKER_NAME"
+    # Get the directory of this script
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PUEUE_WRAPPER="$SCRIPT_DIR/pueue-wrapper"
+    
+    # Update status to working (Pueue already knows it's running)
+    "$PUEUE_WRAPPER" update "$SUBISSUE_ID" working
     
     # Run Claude with work instruction - THIS IS VISIBLE IN TMUX!
     claude "/work-on subissue #$SUBISSUE_ID of parent issue #$PARENT_ISSUE && create a pull request when done"
@@ -109,14 +115,14 @@ while true; do
     if gh pr list --head "$BRANCH_NAME" | grep -q "$BRANCH_NAME"; then
         echo -e "${GREEN}PR created successfully!${NC}"
         
-        # Update queue
-        "$SCRIPT_DIR/queue" update "subissue-$SUBISSUE_ID" status completed
+        # Update status
+        "$PUEUE_WRAPPER" update "$SUBISSUE_ID" completed
         
         # Mark Pueue task as successful
         pueue success $TASK_ID
     else
-        echo -e "${YELLOW}No PR found, marking as needs review${NC}"
-        "$SCRIPT_DIR/queue" update "subissue-$SUBISSUE_ID" status review
+        echo -e "${YELLOW}No PR found, marking as failed${NC}"
+        "$PUEUE_WRAPPER" update "$SUBISSUE_ID" failed
         
         # Mark Pueue task as failed
         pueue kill $TASK_ID
