@@ -1,27 +1,92 @@
 #!/bin/bash
-# Start 4 parallel Claude instances for v2.1.0 development
+# Claude Code Parallel - Quick Start Script
 
-echo "🚀 Starting parallel Claude development for v2.1.0..."
-echo ""
-echo "Opening 4 terminal windows/tabs for:"
-echo "- Issue #2: Update task tool for new format"
-echo "- Issue #3: Add Claude Code enhancements"
-echo "- Issue #4: GitHub checklist parsing"
-echo "- Issue #5: Create setup-tasks command"
-echo ""
-echo "Please run these commands in separate terminals:"
-echo ""
-echo "=== Terminal 1 ==="
-echo "cd /Users/hikaru/Documents/repo/claude-code-parallel/.worktrees/2 && claude \"Work on issue #2 - Update task tool for new format. The task tool needs to support the new #47-1 format instead of just #47. Update all operations to handle task-specific IDs.\""
-echo ""
-echo "=== Terminal 2 ==="
-echo "cd /Users/hikaru/Documents/repo/claude-code-parallel/.worktrees/3 && claude \"Work on issue #3 - Add Claude Code enhancements to commands. Add extended thinking prompts to setup.md, screenshot docs to status.md, and error recovery to work.md\""
-echo ""
-echo "=== Terminal 3 ==="
-echo "cd /Users/hikaru/Documents/repo/claude-code-parallel/.worktrees/4 && claude \"Work on issue #4 - Update github tool for checklist parsing. Add functions to parse checklist items from issues, extract completion status, and update checkboxes via API\""
-echo ""
-echo "=== Terminal 4 ==="
-echo "cd /Users/hikaru/Documents/repo/claude-code-parallel/.worktrees/5 && claude \"Work on issue #5 - Create /project:setup-tasks command. Create a new command that converts GitHub issues with checklists into individual tasks in the queue\""
-echo ""
-echo "Monitor progress with:"
-echo "gh pr list"
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$SCRIPT_DIR"
+
+# Colors for output
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Default values
+DEFAULT_WORKERS=4
+
+# Show usage
+usage() {
+    echo "Usage: $0 <command> [args]"
+    echo ""
+    echo "Commands:"
+    echo "  work ISSUES [WORKERS]  - Start working on issues with N workers"
+    echo "  status                 - Show current status"
+    echo "  stop                   - Stop all workers"
+    echo "  help                   - Show this help"
+    echo ""
+    echo "Examples:"
+    echo "  $0 work 123,124 4      - Work on issues #123 and #124 with 4 workers"
+    echo "  $0 status              - Check progress"
+    echo "  $0 stop                - Stop everything"
+}
+
+# Main command handler
+case "${1:-help}" in
+    work)
+        if [ -z "$2" ]; then
+            echo -e "${RED}Error: No issues specified${NC}"
+            echo "Usage: $0 work ISSUES [WORKERS]"
+            exit 1
+        fi
+        
+        ISSUES="$2"
+        WORKERS="${3:-$DEFAULT_WORKERS}"
+        
+        echo -e "${GREEN}🚀 Starting Claude Code Parallel${NC}"
+        echo "Issues: $ISSUES"
+        echo "Workers: $WORKERS"
+        echo ""
+        
+        # Run setup if not already done
+        if ! pueue status &>/dev/null; then
+            echo "Running initial setup..."
+            "$SCRIPT_DIR/tools/setup-hybrid"
+        fi
+        
+        # Analyze issues and add to queue
+        echo "Analyzing issues..."
+        "$SCRIPT_DIR/tools/analyze" "$ISSUES"
+        
+        # Start workers and monitor
+        echo "Starting workers..."
+        "$SCRIPT_DIR/tools/session" start "$WORKERS"
+        
+        # Show status
+        echo ""
+        echo -e "${GREEN}System started!${NC}"
+        echo "Monitor with: tmux attach -t claude-workers"
+        echo "Check status: $0 status"
+        ;;
+        
+    status)
+        "$SCRIPT_DIR/tools/status-implementation"
+        ;;
+        
+    stop)
+        echo "Stopping all workers..."
+        "$SCRIPT_DIR/tools/session" stop
+        echo -e "${GREEN}All workers stopped${NC}"
+        ;;
+        
+    help|--help|-h)
+        usage
+        ;;
+        
+    *)
+        echo -e "${RED}Unknown command: $1${NC}"
+        usage
+        exit 1
+        ;;
+esac

@@ -1,6 +1,7 @@
 #!/bin/bash
-# Unified monitoring dashboard for hybrid architecture
-# Provides comprehensive real-time status of queue, workers, and tasks
+# Worker Monitor - Unified monitoring dashboard for hybrid architecture
+# Combines: queue status, worker health, tmux grid, and task tracking
+# Replaces: unified-monitor, grid-manager, worker-health-monitor
 
 set -e
 

@@ -18,8 +18,8 @@ fi
 readonly BASE_URL="https://raw.githubusercontent.com/$REPO/main"
 
 # Tools and commands to install
-readonly TOOLS=(task session github maintain setup-autonomous)
-readonly COMMANDS=(setup work status manual maintain auto)
+readonly TOOLS=(analyze github session maintain setup-hybrid queue-pueue hybrid-worker worker-monitor auto-approve)
+readonly COMMANDS=(setup work status add stop resume maintain)
 
 # Colors
 readonly RED='\033[0;31m'
