@@ -141,20 +141,27 @@ create_worker_session() {
     # Kill existing session if exists
     tmux kill-session -t "$SESSION" 2>/dev/null || true
     
-    # Create new session
-    tmux new-session -d -s "$SESSION"
+    # Create new session with initial window
+    tmux new-session -d -s "$SESSION" -n workers
     
-    # Create monitor pane (pane 0) and start monitor
-    tmux send-keys -t "$SESSION:0.0" "$SCRIPT_DIR/worker-monitor" C-m
-    
-    # Create worker panes
+    # Create all panes first (monitor + workers)
     for ((i=1; i<=workers; i++)); do
-        tmux split-window -t "$SESSION"
-        tmux send-keys -t "$SESSION:0.$i" "$SCRIPT_DIR/hybrid-worker $i" C-m
+        tmux split-window -t "$SESSION:workers"
     done
     
-    # Balance the layout
-    tmux select-layout -t "$SESSION" tiled
+    # Balance layout
+    tmux select-layout -t "$SESSION:workers" tiled
+    
+    # Now send commands to each pane (panes are numbered starting at 1)
+    tmux send-keys -t "$SESSION:workers.1" "$SCRIPT_DIR/worker-monitor" C-m
+    
+    # Start workers in remaining panes
+    for ((i=1; i<=workers; i++)); do
+        tmux send-keys -t "$SESSION:workers.$((i+1))" "$SCRIPT_DIR/hybrid-worker $i" C-m
+    done
+    
+    # Final layout adjustment
+    tmux select-layout -t "$SESSION:workers" tiled
     
     echo -e "${GREEN}✓ Hybrid worker session created${NC}"
 }
