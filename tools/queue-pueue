@@ -93,24 +93,24 @@ add_subissue() {
     local parent=$2
     local subissue=$3
     
-    # Add to our file queue first
-    "$SCRIPT_DIR/queue" add "$priority" "$parent" "$subissue"
-    
-    # Add to Pueue
+    # Add directly to Pueue (no file queue needed)
     ensure_pueue_group
+    # Create the command that will be executed when task is claimed
+    local cmd="echo 'Subissue $subissue (Parent: $parent)' > .worktrees/subissue-$subissue.info && process_subissue $subissue $parent"
+    
     pueue add \
         --label "subissue-$subissue" \
         --group "$PUEUE_GROUP" \
         --priority $((10 - priority)) \
-        "$SCRIPT_DIR/hybrid-worker $subissue"
+        -- bash -c "$cmd"
         
     echo "Added subissue $subissue to both queues"
 }
 
 # Monitor and display unified status
 monitor() {
-    # Use the new unified monitor for comprehensive dashboard
-    "$SCRIPT_DIR/unified-monitor" monitor
+    # Use the worker monitor for comprehensive dashboard
+    "$SCRIPT_DIR/worker-monitor"
 }
 
 # Clean completed tasks
@@ -118,8 +118,7 @@ clean() {
     echo "Cleaning completed tasks from Pueue..."
     pueue clean --group "$PUEUE_GROUP"
     
-    echo "Cleaning completed items from file queue..."
-    "$SCRIPT_DIR/queue" clean
+    # No file queue to clean
 }
 
 # Main command handling
